@@ -18,6 +18,11 @@
   <strong>简体中文</strong>
 </p>
 
+<p align="center">
+  <img src="docs/images/screenshot.jpg" width="900"
+       alt="Grok Build GUI 在 macOS 上的界面——会话侧边栏、工作区与分支选择器、消息输入框">
+</p>
+
 ---
 
 Grok Build 本身是一个终端 agent。本应用在它前面放了一套真正的桌面界面——会话侧

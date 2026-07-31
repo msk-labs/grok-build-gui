@@ -18,6 +18,11 @@
   <a href="README.zh-CN.md">简体中文</a>
 </p>
 
+<p align="center">
+  <img src="docs/images/screenshot.jpg" width="900"
+       alt="Grok Build GUI on macOS — session sidebar, workspace and branch picker, and the message composer">
+</p>
+
 ---
 
 Grok Build ships as a terminal agent. This app puts a real desktop UI in front of
