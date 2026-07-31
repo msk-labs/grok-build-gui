@@ -29,23 +29,33 @@ if (!grokPlatform) {
 }
 
 /**
- * Auto-update feed (GitHub Releases). Set both to enable it:
- *   UPDATE_GITHUB_OWNER=<org-or-user> UPDATE_GITHUB_REPO=<repo> npm run package:mac
+ * Auto-update feed. Two providers, first match wins:
+ *
+ *   UPDATE_FEED_URL=<base-url>
+ *     Generic — any static host that serves `latest-mac.yml` beside the zip.
+ *     A local server is what the level-3 test in
+ *     docs/process/testing-auto-update.md uses, so verifying install +
+ *     relaunch needs no public release at all.
+ *
+ *   UPDATE_GITHUB_OWNER=<org-or-user> UPDATE_GITHUB_REPO=<repo>
+ *     GitHub Releases. Must be public — a private repo would need a token
+ *     shipped inside the client.
  *
  * Unset, the build carries no `app-update.yml` and the app reports "no release
- * feed configured" instead of failing a check. Releases must be public — a
- * private repo would need a token shipped in the client.
+ * feed configured" instead of failing a check.
  */
+const updateFeedUrl = process.env.UPDATE_FEED_URL;
 const updateOwner = process.env.UPDATE_GITHUB_OWNER;
 const updateRepo = process.env.UPDATE_GITHUB_REPO;
-const publish =
-  updateOwner && updateRepo
+const publish = updateFeedUrl
+  ? [{ provider: "generic", url: updateFeedUrl }]
+  : updateOwner && updateRepo
     ? [{ provider: "github", owner: updateOwner, repo: updateRepo }]
     : null;
 
 if (!publish) {
   console.warn(
-    "[electron-builder] UPDATE_GITHUB_OWNER / UPDATE_GITHUB_REPO unset — " +
+    "[electron-builder] UPDATE_FEED_URL and UPDATE_GITHUB_OWNER/REPO unset — " +
       "packaging without an auto-update feed.",
   );
 }
