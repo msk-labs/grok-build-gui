@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$project_root"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/package-dmg             Build the signed and notarized release DMG
+  ./scripts/package-dmg --preview   Build an ad-hoc signed DMG for local verification
+  ./scripts/package-dmg --help      Show this help
+
+Run ./bootstrap once after cloning the repository. Both packaging modes verify
+and restore the pinned Grok Build and Open Computer Use runtime dependencies.
+EOF
+}
+
+case "${1:-}" in
+  "")
+    exec npm run package:mac
+    ;;
+  --preview)
+    exec npm run package:mac:preview
+    ;;
+  --help|-h)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

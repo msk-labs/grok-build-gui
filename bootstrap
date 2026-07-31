@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$project_root"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node.js 22.12 or newer is required." >&2
+  exit 1
+fi
+
+exec node scripts/bootstrap.mjs "$@"

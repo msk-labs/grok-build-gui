@@ -1,0 +1,70 @@
+{
+  "name": "grok-gui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex-style desktop GUI control plane for Grok Build via ACP",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "main": "out/electron/main.js",
+  "type": "module",
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.25.12": true,
+    "node-pty@1.1.0": true
+  },
+  "scripts": {
+    "postinstall": "npm run fix:node-pty && npm run artifacts",
+    "fix:node-pty": "node scripts/fix-node-pty-helper.mjs",
+    "artifacts": "npm run artifact:grok-build && npm run artifact:computer-use",
+    "artifacts:verify": "npm run artifact:grok-build:verify && npm run artifact:computer-use:verify",
+    "artifact:grok-build": "node scripts/install-grok-build.mjs",
+    "artifact:grok-build:verify": "node scripts/install-grok-build.mjs --verify",
+    "artifact:computer-use": "node scripts/install-open-computer-use.mjs",
+    "artifact:computer-use:verify": "node scripts/install-open-computer-use.mjs --verify",
+    "dev": "npm run artifacts && vite --config config/vite.config.ts",
+    "dev:update-feed": "node scripts/dev-update-feed.mjs",
+    "build": "npm run fix:node-pty && npm run artifacts && vite build --config config/vite.config.ts",
+    "package:mac": "node scripts/release-mac.mjs",
+    "package:mac:local": "npm run build && MAC_SIGNING_IDENTITY=- electron-builder --config config/electron-builder.cjs --mac dir",
+    "package:mac:preview": "npm run build && MAC_SIGNING_IDENTITY=- electron-builder --config config/electron-builder.cjs --mac dmg --arm64",
+    "package:win": "node scripts/release-win.mjs",
+    "preview": "vite preview --config config/vite.config.ts",
+    "test": "vitest run --config config/vite.config.ts --root .",
+    "test:browser-integration": "node scripts/test-browser-integration.mjs",
+    "test:computer-integration": "node scripts/test-computer-integration.mjs",
+    "typecheck": "tsc -p config/tsconfig.renderer.json --noEmit && tsc -p config/tsconfig.electron.json --noEmit"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.2.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron-updater": "^6.8.9",
+    "highlight.js": "11.11.1",
+    "i18next": "^26.3.6",
+    "node-pty": "^1.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-i18next": "^17.0.11",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "optionalDependencies": {
+    "koffi": "^3.1.2"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "electron": "42.3.0",
+    "electron-builder": "^26.0.12",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^4.1.10"
+  }
+}

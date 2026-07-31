@@ -1,0 +1,45 @@
+.tool-presentation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tool-presentation-command .tool-preview {
+  border-color: var(--border-strong);
+  background: #f6f7f8;
+  white-space: pre;
+}
+
+.tool-presentation-search .tool-preview,
+.tool-presentation-web .tool-preview {
+  max-height: 280px;
+}
+
+.tool-location-line {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.tool-result-videos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.tool-result-video {
+  width: 100%;
+  max-height: 420px;
+  border-radius: 10px;
+  background: #111;
+}
+
+.tool-result-video-missing {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,62 @@
+{
+  "version": "0.2.111",
+  "artifactRelativeRoot": "thirdparty/grok-build/0.2.111",
+  "packagedResourceSubdir": "grok-build",
+  "platforms": {
+    "darwin-arm64": {
+      "artifactPlatform": "macos-aarch64",
+      "url": "https://x.ai/cli/grok-0.2.111-macos-aarch64",
+      "sha256": "e1fafdfffe14f339460befaf194360e8f90bfd02efe8a4f24cfa1c7aea657ffe",
+      "size": 128899632,
+      "executable": "grok"
+    },
+    "win32-x64": {
+      "artifactPlatform": "windows-x86_64",
+      "url": "https://x.ai/cli/grok-0.2.111-windows-x86_64.exe",
+      "sha256": "a3614df24080471709d096a2e47ce7f6c84443af1cb59b7363967858858bc9bc",
+      "size": 137980232,
+      "executable": "grok.exe"
+    },
+    "win32-arm64": {
+      "artifactPlatform": "windows-aarch64",
+      "url": "https://x.ai/cli/grok-0.2.111-windows-aarch64.exe",
+      "sha256": "1fb823307ff526b68b05b1b93e906d1b997090fd109c69374a9a32b582fb6812",
+      "size": 119961928,
+      "executable": "grok.exe"
+    }
+  },
+  "plannedPlatforms": {
+    "linux-x64": {
+      "artifactPlatform": "linux-x86_64",
+      "executable": "grok",
+      "status": "artifact-metadata-required"
+    },
+    "linux-arm64": {
+      "artifactPlatform": "linux-aarch64",
+      "executable": "grok",
+      "status": "artifact-metadata-required"
+    }
+  },
+  "notices": [
+    {
+      "path": "licenses/LICENSE",
+      "url": "https://raw.githubusercontent.com/xai-org/grok-build/c68e39f60462f28d9be5e683d9cbe2c57b1a5027/LICENSE",
+      "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"
+    },
+    {
+      "path": "licenses/THIRD-PARTY-NOTICES",
+      "url": "https://raw.githubusercontent.com/xai-org/grok-build/c68e39f60462f28d9be5e683d9cbe2c57b1a5027/THIRD-PARTY-NOTICES",
+      "sha256": "7b7c315403c596f9b7a13bb562553ee4fd4c05da8672f95bcaa02a125eea2947"
+    },
+    {
+      "path": "licenses/xai-grok-tools-THIRD_PARTY_NOTICES.md",
+      "url": "https://raw.githubusercontent.com/xai-org/grok-build/c68e39f60462f28d9be5e683d9cbe2c57b1a5027/crates/codegen/xai-grok-tools/THIRD_PARTY_NOTICES.md",
+      "sha256": "e8785a6098a7ee780cd2db35745b8e53061cfb1b6da19147a308579466ea4e50"
+    },
+    {
+      "path": "licenses/third-party-NOTICE",
+      "url": "https://raw.githubusercontent.com/xai-org/grok-build/c68e39f60462f28d9be5e683d9cbe2c57b1a5027/third_party/NOTICE",
+      "sha256": "4122c27e9ad4b8e67e6f8a7869d11f389600a5d5f773fdec9d0b2ac9d7f21101"
+    }
+  ]
+}

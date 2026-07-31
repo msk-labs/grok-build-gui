@@ -1,0 +1,37 @@
+# Disposable upstream source trees, extracted app bundles, and research output.
+# Nothing under tmp/ is required to build, test, package, or run the app.
+/tmp/
+
+# Pinned Grok Build and Open Computer Use release dependencies are restored by
+# ./bootstrap. Keep manifests and required license files tracked, but never
+# commit downloaded packages or binaries.
+/thirdparty/grok-build/
+/thirdparty/open-computer-use/*/
+
+# Dependencies & build outputs
+node_modules/
+/out/
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local auto-update testing feed (see docs/process/testing-auto-update.md).
+# Points a dev run at a throwaway update server; never ship one.
+/dev-app-update.yml
+
+# Logs & env
+*.log
+.env
+.env.*
+!.env.example
+
+# Vite / bundler junk and design previews.
+/*.js
+/resources/*-preview.png
+/resources/icon-previews/

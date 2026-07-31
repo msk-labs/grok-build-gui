@@ -1,0 +1,10 @@
+{
+  "packageName": "open-computer-use",
+  "version": "0.2.1",
+  "supportedRange": ">=0.2.1 <0.3.0",
+  "integrity": "sha512-l08mZPs7vJ3Jv9yMyw7kkHbBJA2mPeyNlF+E98Y6Sa36kA548BFThLgghx/Ku1VqO8JGVdCdRenOcwDgZITv4A==",
+  "artifactRelativePath": "thirdparty/open-computer-use/0.2.1/package",
+  "packagedResourceSubdir": "open-computer-use",
+  "license": "MIT",
+  "licenseFile": "thirdparty/open-computer-use/LICENSE"
+}
