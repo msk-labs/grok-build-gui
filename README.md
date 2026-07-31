@@ -13,6 +13,11 @@
   <img alt="Node" src="https://img.shields.io/badge/node-%E2%89%A522.12-339933.svg">
 </p>
 
+<p align="center">
+  <strong>English</strong> ·
+  <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 ---
 
 Grok Build ships as a terminal agent. This app puts a real desktop UI in front of
