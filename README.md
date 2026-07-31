@@ -138,6 +138,7 @@ notarization setup.
 - [Agent guidelines](docs/process/AGENT_GUIDELINES.md)
 - [Next steps](docs/process/NEXT_STEPS.md)
 
-The GUI license is TBD. The bundled Grok Build artifact is Apache-2.0 and ships
-with its upstream and third-party notices. Open Computer Use 0.2.1 is
-MIT-licensed and retains its license in packaged distributions.
+The GUI is MIT-licensed; see [LICENSE](LICENSE). The bundled Grok Build
+artifact is Apache-2.0 and ships with its upstream and third-party notices.
+Open Computer Use 0.2.1 is MIT-licensed and retains its license in packaged
+distributions.
