@@ -1231,8 +1231,9 @@ mark.search-hit {
   cursor: not-allowed;
 }
 
-/* Per-project "Show more" when a folder has more sessions than the preview. */
-.session-group-more {
+/* Per-project "Show more" when a folder has more sessions than the preview.
+   Distinct from .session-group-more (the folder-row ⋯ control). */
+.session-group-show-more {
   display: flex;
   align-items: center;
   width: 100%;
@@ -1251,12 +1252,12 @@ mark.search-hit {
   cursor: pointer;
 }
 
-.session-group-more:hover {
+.session-group-show-more:hover {
   background: var(--bg-hover-sidebar);
   color: var(--text);
 }
 
-.session-group-more:focus-visible {
+.session-group-show-more:focus-visible {
   outline: 2px solid var(--accent-border);
   outline-offset: -2px;
 }

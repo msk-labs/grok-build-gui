@@ -42,7 +42,7 @@ export const zhCN: Record<TranslationKey, string> = {
   "settings.close": "关闭",
   "settings.closeEsc": "关闭设置（Esc）",
   "settings.interface": "界面",
-  "settings.appearance": "外观",
+  "settings.appearance": "终端",
   "settings.interfaceLanguage": "语言",
   "settings.interfaceLanguageHint": "“跟随系统”会使用设备语言。",
   "settings.terminalTheme": "终端配色",

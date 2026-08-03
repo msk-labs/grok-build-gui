@@ -42,7 +42,7 @@ export const en = {
   "settings.close": "Close settings",
   "settings.closeEsc": "Close settings (Esc)",
   "settings.interface": "Interface",
-  "settings.appearance": "Appearance",
+  "settings.appearance": "Terminal",
   "settings.interfaceLanguage": "Language",
   "settings.interfaceLanguageHint": "Follow system uses your device language.",
   "settings.terminalTheme": "Terminal theme",

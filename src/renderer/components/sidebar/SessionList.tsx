@@ -187,7 +187,7 @@ export function SessionList({
                       {canToggle ? (
                         <button
                           type="button"
-                          className="session-group-more"
+                          className="session-group-show-more"
                           aria-expanded={sessionsExpanded}
                           onClick={() => toggleGroupSessions(group.cwd)}
                         >

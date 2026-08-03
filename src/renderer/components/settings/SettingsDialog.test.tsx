@@ -57,7 +57,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Language")).toBeTruthy();
     expect(screen.queryByLabelText("Terminal theme")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
 
     expect(screen.getByLabelText("Terminal theme")).toBeTruthy();
     expect(screen.queryByLabelText("Language")).toBeNull();
