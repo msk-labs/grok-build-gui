@@ -91,6 +91,13 @@ Grok Build 本身是一个终端 agent。本应用在它前面放了一套真正
 - **自动更新**，来源可以是 GitHub Releases 或任意静态更新源，按构建选择启用。
 - **系统代理探测**、窗口状态持久化，以及原生应用菜单。
 
+<p align="center">
+  <img src="docs/images/sign-in.jpg" width="620"
+       alt="Grok Build GUI 的登录窗口，界面语言为简体中文">
+  <br>
+  <em>登录会跳转到浏览器中的 xAI 官方授权页面，授权完成后应用自动登录。</em>
+</p>
+
 ## 架构
 
 ```mermaid

@@ -104,6 +104,14 @@ before it is shown or logged.
 - **Auto-update** from GitHub Releases or any static feed, opt-in per build.
 - **System proxy detection**, persisted window state, and a native app menu.
 
+<p align="center">
+  <img src="docs/images/sign-in.jpg" width="620"
+       alt="The Grok Build GUI sign-in window, shown with the interface language set to Simplified Chinese">
+  <br>
+  <em>Sign-in hands off to xAI's OAuth page in your browser — shown here with the
+  interface language set to Simplified Chinese.</em>
+</p>
+
 ## Architecture
 
 ```mermaid
