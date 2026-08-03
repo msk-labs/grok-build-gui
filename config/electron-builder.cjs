@@ -97,6 +97,12 @@ module.exports = {
     notarize: false,
     entitlements: "resources/entitlements.mac.plist",
     entitlementsInherit: "resources/entitlements.mac.plist",
+    // Every mac artifact except the DMG, which overrides this below. Left to
+    // the default the zip is named after productName, and productName has
+    // spaces: GitHub rewrites those to dots on upload ("Grok.Build.GUI-…"),
+    // while latest-mac.yml records the dashed form, so electron-updater asks
+    // for a URL that 404s. Naming the zip here keeps the two identical.
+    artifactName: "Grok-Build-GUI-${version}-${arch}-mac.${ext}",
     // Squirrel.Mac updates from a zip, not the DMG — the DMG stays the
     // human download, the zip is what electron-updater fetches.
     target: [
