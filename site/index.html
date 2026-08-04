@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Grok Build GUI — a desktop GUI for the Grok Build CLI (ACP client)</title>
+<meta name="description" content="Grok Build GUI is a free, open-source desktop app that puts a real graphical interface in front of the Grok Build CLI. Streaming transcript, tool cards and diffs, a permission modal, an agent-drivable browser, a terminal and a file tree — over ACP, on macOS and Windows.">
+<link rel="canonical" href="https://sa366433355-cell.github.io/grok-build-gui/">
+
+<link rel="alternate" hreflang="en" href="https://sa366433355-cell.github.io/grok-build-gui/">
+<link rel="alternate" hreflang="zh-Hans" href="https://sa366433355-cell.github.io/grok-build-gui/zh/">
+<link rel="alternate" hreflang="x-default" href="https://sa366433355-cell.github.io/grok-build-gui/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Grok Build GUI">
+<meta property="og:title" content="Grok Build GUI — a desktop GUI for the Grok Build CLI">
+<meta property="og:description" content="An open-source Electron desktop control plane for Grok Build, speaking ACP to a local grok agent. Streaming transcript, tool cards, permission modal, built-in browser, terminal and file tree.">
+<meta property="og:url" content="https://sa366433355-cell.github.io/grok-build-gui/">
+<meta property="og:image" content="https://sa366433355-cell.github.io/grok-build-gui/images/screenshot.jpg">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="zh_CN">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Grok Build GUI — a desktop GUI for the Grok Build CLI">
+<meta name="twitter:description" content="An open-source Electron desktop control plane for Grok Build, speaking ACP to a local grok agent.">
+<meta name="twitter:image" content="https://sa366433355-cell.github.io/grok-build-gui/images/screenshot.jpg">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#129302;</text></svg>">
+<link rel="stylesheet" href="style.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Grok Build GUI",
+      "alternateName": ["Grok Build Desktop", "Grok CLI GUI"],
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS (Apple Silicon), Windows 10/11",
+      "description": "An open-source desktop control plane for the Grok Build CLI, speaking the Agent Client Protocol (ACP) to a local grok agent. Provides a streaming transcript, tool cards with diffs, a permission modal, an agent-drivable embedded browser, a terminal and a file tree.",
+      "url": "https://sa366433355-cell.github.io/grok-build-gui/",
+      "downloadUrl": "https://github.com/sa366433355-cell/grok-build-gui/releases",
+      "softwareVersion": "0.1.2",
+      "license": "https://opensource.org/licenses/MIT",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "codeRepository": "https://github.com/sa366433355-cell/grok-build-gui"
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does Grok Build have a GUI?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Grok Build ships as a terminal agent, so there is no official desktop GUI from xAI. Grok Build GUI is a third-party, open-source desktop client that drives the same CLI over the Agent Client Protocol (ACP), giving you a session sidebar, a streaming transcript, tool cards and a permission modal."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Grok Build GUI a separate agent?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. It is a client, not a second agent. The app restores a pinned, integrity-checked grok executable, spawns 'grok agent stdio' and drives every session over ACP. The agent remains the single source of truth for sessions, tools and loops; the GUI owns presentation, local OS capabilities and the human-approval surface."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which platforms does Grok Build GUI support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "macOS on Apple Silicon and Windows 10/11 on x64 or ARM64. Linux platform identifiers are reserved in the runtime manifest but remain unsupported until pinned artifact URLs and SHA-256 values are verified."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Grok Build GUI free and open source?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. The GUI is MIT-licensed. The bundled Grok Build artifact is Apache-2.0 and ships with its upstream notices, and Open Computer Use is MIT-licensed."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <span class="brand">Grok Build GUI</span>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/sa366433355-cell/grok-build-gui">GitHub</a>
+      <a href="zh/" hreflang="zh-Hans">简体中文</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h1>A desktop GUI for the Grok&nbsp;Build CLI</h1>
+    <p class="tagline">
+      Grok Build ships as a terminal agent. <strong>Grok Build GUI</strong> puts a real
+      desktop interface in front of it — a session sidebar, a streaming transcript with
+      tool cards, a permission modal, an embedded browser the agent can drive, a terminal
+      and a file tree — without reimplementing the agent itself.
+    </p>
+
+    <div class="badges">
+      <span class="badge">MIT licensed</span>
+      <span class="badge">macOS (Apple Silicon)</span>
+      <span class="badge">Windows 10/11</span>
+      <span class="badge">Electron 42</span>
+      <span class="badge">React 19</span>
+      <span class="badge">ACP</span>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/sa366433355-cell/grok-build-gui/releases">Download the latest release</a>
+      <a class="btn" href="https://github.com/sa366433355-cell/grok-build-gui">View source on GitHub</a>
+    </div>
+  </div>
+
+  <figure>
+    <img src="images/screenshot.jpg" width="900" height="563" loading="eager"
+         alt="Grok Build GUI running on macOS, showing the session sidebar, the workspace and branch picker, and the message composer">
+    <figcaption>Grok Build GUI on macOS — session sidebar, workspace and branch picker, message composer.</figcaption>
+  </figure>
+
+</div>
+
+<section id="what">
+  <div class="wrap">
+    <h2>A client, not a second agent</h2>
+    <p class="lede">
+      The app restores a pinned, integrity-checked <code>grok</code> executable, spawns
+      <code>grok agent stdio</code>, and drives every session over the
+      <a href="https://agentclientprotocol.com">Agent Client Protocol</a>. The agent stays
+      the single source of truth for sessions, tools and loops; the GUI owns presentation,
+      local OS capabilities, and the human-approval surface that ACP asks for.
+    </p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Features</h2>
+    <p class="lede">Everything the terminal gives you, plus the things a terminal cannot.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Streaming transcript</h3>
+        <p>Per-turn navigation, a turn rail, and rewind-to-here. Markdown with syntax
+        highlighting, inline image attachments and a lightbox.</p>
+      </div>
+      <div class="card">
+        <h3>Tool cards and diffs</h3>
+        <p>Every tool call expands into arguments, results and unified diffs, with a
+        file-change bar summarising what a turn touched.</p>
+      </div>
+      <div class="card">
+        <h3>Permission modal</h3>
+        <p>Implements the ACP <code>request_permission</code> reverse-request: the agent
+        asks, you allow or deny, per call — from ask-for-approval through full access.</p>
+      </div>
+      <div class="card">
+        <h3>Browser the agent can drive</h3>
+        <p>A webview pane exposed to the agent as an MCP tool server. You watch every
+        action; password fields always stop for explicit approval and are redacted.</p>
+      </div>
+      <div class="card">
+        <h3>Terminal and file tree</h3>
+        <p>Real PTY sessions (node-pty + xterm.js) with a configurable shell, plus a file
+        tree and viewer with reveal-in-Finder and open-with.</p>
+      </div>
+      <div class="card">
+        <h3>Git worktree isolation</h3>
+        <p>Start a chat on its own worktree from any branch, so the agent's edits never
+        touch your working copy. The app tracks status and cleans up.</p>
+      </div>
+      <div class="card">
+        <h3>Screen capture and voice</h3>
+        <p>Full screen, window or drag-selected region straight into the composer as an
+        attachment, plus push-to-talk speech-to-text.</p>
+      </div>
+      <div class="card">
+        <h3>Prompt queue and context meter</h3>
+        <p>Keep typing while a turn runs and queue follow-ups. The context meter breaks
+        the window into cached prefix, new input, reply, thinking tokens and free space.</p>
+      </div>
+      <div class="card">
+        <h3>Sessions and workspaces</h3>
+        <p>Sessions grouped by project, searchable, renameable and resumable, with history
+        streamed back in on load, and a workspace picker with recent projects.</p>
+      </div>
+      <div class="card">
+        <h3>Account and plugins</h3>
+        <p>Grok sign-in via the CLI's OAuth flow with usage and quota display, plus plugin
+        install, enable, disable and uninstall.</p>
+      </div>
+      <div class="card">
+        <h3>English and 简体中文</h3>
+        <p>Interface language follows the system or can be set explicitly.</p>
+      </div>
+      <div class="card">
+        <h3>Auto-update</h3>
+        <p>Opt-in per build, from GitHub Releases or any static feed. System proxy
+        detection, persisted window state and a native app menu.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <figure>
+      <img src="images/sign-in.jpg" width="620" height="420" loading="lazy"
+           alt="The Grok Build GUI sign-in window with the interface language set to Simplified Chinese">
+      <figcaption>Sign-in hands off to xAI's OAuth page in your browser — shown here with
+      the interface language set to Simplified Chinese.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <h2>Architecture</h2>
+    <ul class="plain">
+      <li><strong>Renderer → main.</strong> The renderer holds no privileged handles.
+      Agent prompts, terminal bytes, file reads and screen capture all cross a
+      <code>contextBridge</code> preload surface into the main process.</li>
+      <li><strong>Main → agent.</strong> The main process spawns the pinned
+      <code>grok agent stdio</code> and speaks ACP over its stdio pipes. Session state,
+      tool execution and goal loops live in the agent.</li>
+      <li><strong>Agent → browser.</strong> A loopback HTTP bridge on a random port with a
+      random 32-byte bearer token backs an MCP server descriptor handed to the agent. The
+      agent's MCP child forwards <code>browser_*</code> calls back over that authenticated
+      bridge, which drives the webview you are watching. The agent never touches the
+      renderer directly.</li>
+      <li><strong>Two safety layers.</strong> App permissions (ACP
+      <code>request_permission</code> → the GUI modal) are what this app implements. The
+      optional OS sandbox (Seatbelt/Landlock) is enforced by the agent and fails hard with
+      <code>EPERM</code>.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install and run</h2>
+    <p class="lede">
+      Requires Node.js 22.12+. Prebuilt installers are on the
+      <a href="https://github.com/sa366433355-cell/grok-build-gui/releases">releases page</a>;
+      to run from source:
+    </p>
+
+    <p><strong>macOS</strong></p>
+<pre><code>git clone https://github.com/sa366433355-cell/grok-build-gui.git
+cd grok-build-gui
+./bootstrap --start</code></pre>
+
+    <p><strong>Windows</strong></p>
+<pre><code>git clone https://github.com/sa366433355-cell/grok-build-gui.git
+cd grok-build-gui
+.\bootstrap.cmd --start</code></pre>
+
+    <p><code>bootstrap</code> installs the locked npm dependencies and restores the exact
+    runtime versions declared in <code>config/runtime/</code>. Downloaded runtime files
+    land under <code>thirdparty/</code> and are never committed.</p>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="wrap">
+    <h2>FAQ</h2>
+
+    <h3>Does Grok Build have a GUI?</h3>
+    <p>Grok Build ships as a terminal agent, so there is no official desktop GUI from xAI.
+    Grok Build GUI is a third-party, open-source desktop client that drives the same CLI
+    over ACP.</p>
+
+    <h3>Is this a fork of the agent?</h3>
+    <p>No. It is a client. It spawns the official pinned <code>grok</code> executable and
+    talks to it over stdio; the agent keeps owning sessions, tools and loops.</p>
+
+    <h3>Which platforms are supported?</h3>
+    <p>macOS on Apple Silicon and Windows 10/11 on x64 or ARM64. Linux identifiers are
+    reserved in the runtime manifest but remain unsupported until pinned artifact URLs,
+    sizes and SHA-256 values are added and verified.</p>
+
+    <h3>Is it free?</h3>
+    <p>Yes. The GUI is MIT-licensed. The bundled Grok Build artifact is Apache-2.0 and
+    ships with its upstream and third-party notices; Open Computer Use 0.2.1 is
+    MIT-licensed.</p>
+
+    <h3>How does it keep the agent from doing something unwanted?</h3>
+    <p>Every tool call the agent flags goes through the ACP permission request, which
+    surfaces as a modal you allow or deny per call. Password fields in the embedded
+    browser always stop for approval, and the secret is redacted before the permission
+    payload is shown or logged.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Grok Build GUI is an independent open-source project and is not affiliated with,
+    endorsed by, or sponsored by xAI. “Grok” is a trademark of its respective owner.
+    <br><br>
+    <a href="https://github.com/sa366433355-cell/grok-build-gui">Source</a> ·
+    <a href="https://github.com/sa366433355-cell/grok-build-gui/releases">Releases</a> ·
+    <a href="https://github.com/sa366433355-cell/grok-build-gui/blob/main/LICENSE">MIT License</a> ·
+    <a href="zh/">简体中文</a>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -14,6 +14,11 @@
 </p>
 
 <p align="center">
+  <a href="https://sa366433355-cell.github.io/grok-build-gui/"><strong>Website</strong></a> ·
+  <a href="https://github.com/sa366433355-cell/grok-build-gui/releases">Releases</a>
+</p>
+
+<p align="center">
   <strong>English</strong> ·
   <a href="README.zh-CN.md">简体中文</a>
 </p>

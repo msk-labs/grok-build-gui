@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sa366433355-cell.github.io/grok-build-gui/sitemap.xml

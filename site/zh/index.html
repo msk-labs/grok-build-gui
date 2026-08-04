@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Grok Build GUI — Grok Build CLI 的桌面图形界面客户端</title>
+<meta name="description" content="Grok Build GUI 是一个免费开源的桌面应用，为 Grok Build 命令行 agent 提供真正的图形界面：流式对话、工具卡片与 diff、权限确认弹窗、可被 agent 操控的内置浏览器、终端和文件树。基于 ACP 协议，支持 macOS 与 Windows。">
+<link rel="canonical" href="https://sa366433355-cell.github.io/grok-build-gui/zh/">
+
+<link rel="alternate" hreflang="en" href="https://sa366433355-cell.github.io/grok-build-gui/">
+<link rel="alternate" hreflang="zh-Hans" href="https://sa366433355-cell.github.io/grok-build-gui/zh/">
+<link rel="alternate" hreflang="x-default" href="https://sa366433355-cell.github.io/grok-build-gui/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Grok Build GUI">
+<meta property="og:title" content="Grok Build GUI — Grok Build CLI 的桌面图形界面客户端">
+<meta property="og:description" content="为 Grok Build 命令行 agent 提供真正桌面界面的开源 Electron 客户端，通过 ACP 协议驱动本地 grok agent。">
+<meta property="og:url" content="https://sa366433355-cell.github.io/grok-build-gui/zh/">
+<meta property="og:image" content="https://sa366433355-cell.github.io/grok-build-gui/images/screenshot.jpg">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Grok Build GUI — Grok Build CLI 的桌面图形界面客户端">
+<meta name="twitter:description" content="为 Grok Build 命令行 agent 提供真正桌面界面的开源 Electron 客户端。">
+<meta name="twitter:image" content="https://sa366433355-cell.github.io/grok-build-gui/images/screenshot.jpg">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#129302;</text></svg>">
+<link rel="stylesheet" href="../style.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Grok Build GUI",
+  "alternateName": ["Grok Build 桌面客户端", "Grok CLI 图形界面"],
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS (Apple Silicon), Windows 10/11",
+  "description": "为 Grok Build 命令行 agent 提供图形界面的开源桌面客户端，通过 ACP 协议驱动本地 grok agent，提供流式对话、工具卡片与 diff、权限确认弹窗、可被 agent 操控的内置浏览器、终端与文件树。",
+  "url": "https://sa366433355-cell.github.io/grok-build-gui/zh/",
+  "downloadUrl": "https://github.com/sa366433355-cell/grok-build-gui/releases",
+  "softwareVersion": "0.1.2",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+  "codeRepository": "https://github.com/sa366433355-cell/grok-build-gui",
+  "inLanguage": "zh-Hans"
+}
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <span class="brand">Grok Build GUI</span>
+    <nav>
+      <a href="#features">功能</a>
+      <a href="#architecture">架构</a>
+      <a href="#install">安装</a>
+      <a href="#faq">常见问题</a>
+      <a href="https://github.com/sa366433355-cell/grok-build-gui">GitHub</a>
+      <a href="../" hreflang="en">English</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h1>Grok Build CLI 的桌面图形界面</h1>
+    <p class="tagline">
+      Grok Build 本身是一个终端 agent。<strong>Grok Build GUI</strong> 在它前面放上一层真正的桌面界面 ——
+      会话侧栏、带工具卡片的流式对话、权限确认弹窗、可被 agent 操控的内置浏览器、终端和文件树 ——
+      而不重新实现 agent 本身。
+    </p>
+
+    <div class="badges">
+      <span class="badge">MIT 开源</span>
+      <span class="badge">macOS（Apple 芯片）</span>
+      <span class="badge">Windows 10/11</span>
+      <span class="badge">Electron 42</span>
+      <span class="badge">React 19</span>
+      <span class="badge">ACP 协议</span>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/sa366433355-cell/grok-build-gui/releases">下载最新版本</a>
+      <a class="btn" href="https://github.com/sa366433355-cell/grok-build-gui">在 GitHub 上查看源码</a>
+    </div>
+  </div>
+
+  <figure>
+    <img src="../images/screenshot.jpg" width="900" height="563" loading="eager"
+         alt="macOS 上运行的 Grok Build GUI，显示会话侧栏、工作区与分支选择器以及输入框">
+    <figcaption>macOS 上的 Grok Build GUI —— 会话侧栏、工作区与分支选择器、消息输入框。</figcaption>
+  </figure>
+
+</div>
+
+<section id="what">
+  <div class="wrap">
+    <h2>它是客户端，不是第二个 agent</h2>
+    <p class="lede">
+      应用会还原一个版本固定、带完整性校验的 <code>grok</code> 可执行文件，拉起
+      <code>grok agent stdio</code>，并通过
+      <a href="https://agentclientprotocol.com">Agent Client Protocol（ACP）</a>
+      驱动每一次会话。会话、工具和循环的唯一事实来源始终是 agent 本身；
+      GUI 负责的是呈现、本地系统能力，以及 ACP 所要求的人工确认界面。
+    </p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>功能</h2>
+    <p class="lede">终端能给你的全部，加上终端给不了的部分。</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>流式对话</h3>
+        <p>逐轮导航、轮次导轨、回溯到指定位置。Markdown 与语法高亮、内联图片附件与灯箱预览。</p>
+      </div>
+      <div class="card">
+        <h3>工具卡片与 diff</h3>
+        <p>每次工具调用都可展开查看参数、结果和统一格式 diff，并有文件变更条汇总这一轮改动了什么。</p>
+      </div>
+      <div class="card">
+        <h3>权限确认弹窗</h3>
+        <p>实现 ACP 的 <code>request_permission</code> 反向请求：agent 发问，你逐次允许或拒绝 ——
+        从逐项确认到完全放开（YOLO）都可选。</p>
+      </div>
+      <div class="card">
+        <h3>可被 agent 操控的浏览器</h3>
+        <p>内置 webview 面板以 MCP 工具服务的形式暴露给 agent。每一步操作你都看得见；
+        密码输入框永远会停下来单独请求确认，且密文在权限载荷中被脱敏。</p>
+      </div>
+      <div class="card">
+        <h3>终端与文件树</h3>
+        <p>真实 PTY 会话（node-pty + xterm.js），可配置 shell；文件树与查看器支持
+        在访达中显示、以其他应用打开。</p>
+      </div>
+      <div class="card">
+        <h3>Git worktree 隔离</h3>
+        <p>可以从任意分支为一次对话开一个独立 worktree，agent 的改动不会碰到你的工作副本；
+        应用会跟踪状态并负责清理。</p>
+      </div>
+      <div class="card">
+        <h3>截屏与语音输入</h3>
+        <p>整屏、窗口或拖选区域（支持多区域）截图，带编辑器，直接作为附件进入输入框；
+        以及按住说话的语音转文字。</p>
+      </div>
+      <div class="card">
+        <h3>提示排队与上下文计量</h3>
+        <p>一轮还在跑的时候可以继续打字排队追问，也可以中途插话。上下文计量把窗口拆成
+        缓存前缀、新输入、回复、思考 token 和剩余空间。</p>
+      </div>
+      <div class="card">
+        <h3>会话与工作区</h3>
+        <p>会话按项目分组，可搜索、重命名、恢复，加载时把历史流式补回；
+        工作区选择器带最近项目和临时任务工作区。</p>
+      </div>
+      <div class="card">
+        <h3>账号与插件</h3>
+        <p>通过 CLI 的 OAuth 流程登录 Grok，显示账号与用量配额；
+        插件可列出、安装、启用、禁用、卸载。</p>
+      </div>
+      <div class="card">
+        <h3>中英文界面</h3>
+        <p>界面语言支持简体中文与英文，也可以跟随系统。</p>
+      </div>
+      <div class="card">
+        <h3>自动更新</h3>
+        <p>按构建选择是否开启，来源可以是 GitHub Releases 或任意静态更新源。
+        另有系统代理检测、窗口状态记忆和原生应用菜单。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <figure>
+      <img src="../images/sign-in.jpg" width="620" height="420" loading="lazy"
+           alt="Grok Build GUI 的登录窗口，界面语言设置为简体中文">
+      <figcaption>登录会跳转到浏览器中 xAI 的 OAuth 页面 —— 图中界面语言设置为简体中文。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <h2>架构</h2>
+    <ul class="plain">
+      <li><strong>渲染进程 → 主进程。</strong>渲染进程不持有任何特权句柄。
+      agent 提示、终端字节流、文件读取、屏幕截图，全部经由
+      <code>contextBridge</code> 预加载层进入主进程。</li>
+      <li><strong>主进程 → agent。</strong>主进程拉起版本固定的
+      <code>grok agent stdio</code>，通过它的 stdio 管道讲 ACP。
+      会话状态、工具执行和目标循环都在 agent 里。</li>
+      <li><strong>agent → 浏览器。</strong>主进程在随机端口上启动一个带随机 32 字节 bearer token
+      的回环 HTTP 桥，然后把一个 MCP 服务描述符交给 agent。agent 把该 MCP 服务作为自己的
+      stdio 子进程拉起，子进程再把 <code>browser_*</code> 调用通过那条带鉴权的回环桥转发回来，
+      驱动你正在看的 webview。agent 从不直接接触渲染进程。</li>
+      <li><strong>两层安全。</strong>应用层权限（ACP <code>request_permission</code> → GUI 弹窗）
+      是这个应用实现的那一层。可选的操作系统沙箱（Seatbelt/Landlock）由 agent 强制执行，
+      违反时直接以 <code>EPERM</code> 失败。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>安装与运行</h2>
+    <p class="lede">
+      需要 Node.js 22.12 以上。预编译安装包在
+      <a href="https://github.com/sa366433355-cell/grok-build-gui/releases">Releases 页面</a>；
+      从源码运行：
+    </p>
+
+    <p><strong>macOS</strong></p>
+<pre><code>git clone https://github.com/sa366433355-cell/grok-build-gui.git
+cd grok-build-gui
+./bootstrap --start</code></pre>
+
+    <p><strong>Windows</strong></p>
+<pre><code>git clone https://github.com/sa366433355-cell/grok-build-gui.git
+cd grok-build-gui
+.\bootstrap.cmd --start</code></pre>
+
+    <p><code>bootstrap</code> 会安装锁定的 npm 依赖，并还原 <code>config/runtime/</code>
+    中声明的确切运行时版本。下载下来的运行时文件放在 <code>thirdparty/</code>，永远不会被提交。</p>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="wrap">
+    <h2>常见问题</h2>
+
+    <h3>Grok Build 有图形界面吗？</h3>
+    <p>Grok Build 本身是终端 agent，xAI 没有提供官方桌面 GUI。
+    Grok Build GUI 是一个第三方开源桌面客户端，通过 ACP 驱动同一个 CLI。</p>
+
+    <h3>这是 agent 的一个 fork 吗？</h3>
+    <p>不是。它是客户端。它拉起官方的、版本固定的 <code>grok</code> 可执行文件并通过 stdio 与之通信；
+    会话、工具和循环依然归 agent 所有。</p>
+
+    <h3>支持哪些平台？</h3>
+    <p>Apple 芯片的 macOS，以及 x64 或 ARM64 的 Windows 10/11。
+    Linux 的平台标识已在运行时清单中预留，但在固定产物 URL、大小和 SHA-256 校验值补齐并验证之前仍不受支持。</p>
+
+    <h3>免费吗？</h3>
+    <p>免费。GUI 采用 MIT 许可。随包的 Grok Build 产物是 Apache-2.0 并附带上游及第三方声明；
+    Open Computer Use 0.2.1 是 MIT 许可。</p>
+
+    <h3>怎么防止 agent 做出你不想要的操作？</h3>
+    <p>agent 标记的每一次工具调用都会走 ACP 权限请求，在界面上表现为一个逐次允许或拒绝的弹窗。
+    内置浏览器里的密码框永远会停下来请求确认，且密文在权限载荷被展示或记录之前就已脱敏。</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Grok Build GUI 是一个独立的开源项目，与 xAI 无从属关系，未获其背书或赞助。
+    “Grok” 是其各自权利人的商标。
+    <br><br>
+    <a href="https://github.com/sa366433355-cell/grok-build-gui">源码</a> ·
+    <a href="https://github.com/sa366433355-cell/grok-build-gui/releases">版本发布</a> ·
+    <a href="https://github.com/sa366433355-cell/grok-build-gui/blob/main/LICENSE">MIT 许可</a> ·
+    <a href="../">English</a>
+  </div>
+</footer>
+
+</body>
+</html>
