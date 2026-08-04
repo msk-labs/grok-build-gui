@@ -154,10 +154,30 @@ export function parseResolvedProxy(
   };
 }
 
+/** Ask Chromium which proxy it would use, honoring PAC scripts and, on
+ * Windows and Linux, the OS proxy settings that have no dedicated reader. */
+async function resolveChromiumProxy(
+  noProxy: string[],
+): Promise<SystemProxySnapshot> {
+  const { session } = await import("electron");
+  session.defaultSession.forceReloadProxyConfig();
+  const resolved = await session.defaultSession.resolveProxy(
+    "https://api.x.ai/",
+  );
+  return parseResolvedProxy(resolved, noProxy);
+}
+
 /** Read the current effective OS proxy. Null means unsupported or unreadable. */
 export async function readSystemProxy(): Promise<SystemProxySnapshot | null> {
-  if (process.platform !== "darwin") return null;
   try {
+    if (process.platform !== "darwin") {
+      // Chromium is the only cross-platform view of the OS proxy here, but a
+      // direct answer stays null: unlike the authoritative macOS read below it
+      // cannot see proxy variables exported into this process, so treating it
+      // as "no proxy" would strip a deliberately configured one.
+      const snapshot = await resolveChromiumProxy(LOCAL_BYPASS);
+      return snapshot.mode === "direct" ? null : snapshot;
+    }
     const [{ execFile }, { promisify }] = await Promise.all([
       import("node:child_process"),
       import("node:util"),
@@ -170,13 +190,7 @@ export async function readSystemProxy(): Promise<SystemProxySnapshot | null> {
     });
     const snapshot = parseMacSystemProxy(stdout);
     if (snapshot.mode !== "auto") return snapshot;
-
-    const { session } = await import("electron");
-    session.defaultSession.forceReloadProxyConfig();
-    const resolved = await session.defaultSession.resolveProxy(
-      "https://api.x.ai/",
-    );
-    return parseResolvedProxy(resolved, snapshot.noProxy);
+    return await resolveChromiumProxy(snapshot.noProxy);
   } catch (error) {
     console.warn(
       "[grok-gui] could not read system proxy:",

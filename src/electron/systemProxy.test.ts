@@ -1,9 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applySystemProxyEnvironment,
   parseMacSystemProxy,
   parseResolvedProxy,
+  readSystemProxy,
 } from "./systemProxy";
+
+const chromiumProxy = vi.hoisted(() => ({ resolved: "DIRECT" }));
+
+vi.mock("electron", () => ({
+  session: {
+    defaultSession: {
+      forceReloadProxyConfig: vi.fn(),
+      resolveProxy: vi.fn(async () => chromiumProxy.resolved),
+    },
+  },
+}));
+
+function withPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, "platform", {
+    value: platform,
+    configurable: true,
+  });
+}
 
 describe("parseMacSystemProxy", () => {
   it("maps enabled HTTP, HTTPS, SOCKS, and bypass settings", () => {
@@ -81,6 +100,35 @@ describe("parseResolvedProxy", () => {
       allProxy: null,
       noProxy: ["localhost", "127.0.0.1", "::1"],
     });
+  });
+});
+
+describe("readSystemProxy", () => {
+  const realPlatform = process.platform;
+
+  afterEach(() => {
+    withPlatform(realPlatform);
+    chromiumProxy.resolved = "DIRECT";
+  });
+
+  it("falls back to Chromium where no dedicated reader exists", async () => {
+    withPlatform("win32");
+    chromiumProxy.resolved = "PROXY 127.0.0.1:10808";
+
+    await expect(readSystemProxy()).resolves.toEqual({
+      mode: "fixed",
+      httpProxy: "http://127.0.0.1:10808",
+      httpsProxy: "http://127.0.0.1:10808",
+      allProxy: null,
+      noProxy: ["localhost", "127.0.0.1", "::1"],
+    });
+  });
+
+  it("keeps an exported proxy when Chromium reports a direct connection", async () => {
+    withPlatform("win32");
+    chromiumProxy.resolved = "DIRECT";
+
+    await expect(readSystemProxy()).resolves.toBeNull();
   });
 });
 
