@@ -526,6 +526,27 @@ export function markAssistantDone(messages: ChatMessage[]): ChatMessage[] {
   return finishStreamingAssistant(messages);
 }
 
+/**
+ * Attach turn artifacts to the newest assistant message.
+ *
+ * The scan finishes after the turn does, so this runs as a second pass over an
+ * already-completed message rather than as part of the update stream.
+ */
+export function attachTurnArtifacts(
+  messages: ChatMessage[],
+  paths: string[],
+): ChatMessage[] {
+  if (paths.length === 0) return messages;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const next = messages.slice();
+    next[i] = { ...msg, artifacts: paths };
+    return next;
+  }
+  return messages;
+}
+
 /** After history replay, mark all assistant messages complete. */
 export function finalizeHistory(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((m) =>

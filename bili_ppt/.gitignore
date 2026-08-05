@@ -1,0 +1,6 @@
+node_modules/
+.venv/
+preview*.html
+docx-preview*.html
+docx-text.txt
+package-lock.json

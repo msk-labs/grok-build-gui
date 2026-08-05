@@ -1,4 +1,5 @@
 import type { FileChange } from "../../lib/fileChanges";
+import { extensionOf, useFileIcons } from "./useFileIcons";
 import { useTranslation } from "react-i18next";
 
 export type OpenFileViewRequest = {
@@ -79,6 +80,11 @@ function splitRelPath(rel: string): { dir: string; name: string } {
  */
 export function FileChangeBar({ changes, onOpen, workspaceRoot }: Props) {
   const { t } = useTranslation();
+  // Hooks must run before the early return below.
+  const icons = useFileIcons(
+    changes.map((c) => c.path),
+    workspaceRoot,
+  );
   if (changes.length === 0) return null;
 
   return (
@@ -90,6 +96,7 @@ export function FileChangeBar({ changes, onOpen, workspaceRoot }: Props) {
             isCreate || c.pathOnly || !c.newText ? "content" : "diff";
           const rel = displayPath(c.path, workspaceRoot);
           const { dir, name } = splitRelPath(rel);
+          const icon = icons.get(extensionOf(c.path));
 
           return (
             <li key={c.path}>
@@ -107,7 +114,11 @@ export function FileChangeBar({ changes, onOpen, workspaceRoot }: Props) {
                 }}
               >
                 <span className="file-change-icon" aria-hidden>
-                  <FileIcon />
+                  {icon ? (
+                    <img className="file-change-icon-img" src={icon} alt="" />
+                  ) : (
+                    <FileIcon />
+                  )}
                 </span>
                 <span className="file-change-path">
                   {dir ? (

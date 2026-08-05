@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { DiffLines } from "../chat/DiffLines";
 import { basename } from "../../lib/lineDiff";
+import { OfficeView } from "./office/OfficeView";
+import {
+  isLegacyOfficeBinary,
+  officeKindForPath,
+} from "./office/officeKind";
 import type { FileViewPayload } from "./types";
 import { useTranslation } from "react-i18next";
 
@@ -21,8 +26,16 @@ export function FileViewPane({ view, workspaceRoot }: Props) {
   const [diskError, setDiskError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Office files are binary containers, so they bypass the text read entirely
+  // and go straight to the dedicated viewers.
+  const isOffice =
+    view.mode === "content" &&
+    Boolean(view.path) &&
+    (officeKindForPath(view.path) !== null || isLegacyOfficeBinary(view.path));
+
   const needsDisk =
     view.mode === "content" &&
+    !isOffice &&
     (view.newText == null || view.newText === "") &&
     Boolean(view.path);
 
@@ -99,6 +112,8 @@ export function FileViewPane({ view, workspaceRoot }: Props) {
       <div className="file-view-body">
         {isDiff ? (
           <DiffLines oldText={view.oldText} newText={view.newText ?? ""} />
+        ) : isOffice ? (
+          <OfficeView root={workspaceRoot ?? ""} path={view.path} />
         ) : loading ? (
           <div className="file-view-empty">{t("common.loading")}</div>
         ) : diskError ? (

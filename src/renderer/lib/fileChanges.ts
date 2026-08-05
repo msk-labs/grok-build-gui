@@ -113,6 +113,44 @@ export function collectFileChanges(blocks: AssistantBlock[]): FileChange[] {
   return [...map.values()];
 }
 
+/**
+ * Append files detected on disk after the turn.
+ *
+ * Tool-reported changes win: they carry diffs and line stats, while an
+ * artifact is only a path. A file that appears both ways (the agent edited it
+ * *and* it is a spreadsheet) must not produce two rows.
+ */
+export function withTurnArtifacts(
+  changes: FileChange[],
+  artifacts: string[] | undefined,
+): FileChange[] {
+  if (!artifacts || artifacts.length === 0) return changes;
+
+  // Tool paths are usually absolute while artifacts are workspace-relative,
+  // so a plain equality check would let the same file through twice.
+  const known = changes.map((c) => normalizePath(c.path));
+  const extra: FileChange[] = [];
+  for (const path of artifacts) {
+    const key = normalizePath(path);
+    if (!key) continue;
+    if (known.some((p) => p === key || p.endsWith(`/${key}`))) continue;
+    known.push(key);
+    extra.push({
+      path,
+      name: basename(path),
+      kind: "create",
+      stats: { added: 0, removed: 0 },
+      pathOnly: true,
+    });
+  }
+  return [...changes, ...extra];
+}
+
+/** Compare by trailing path so `./a/b.xlsx` and `a/b.xlsx` are one file. */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
 /** Whether this tool should show inline +N/-M on the fold label. */
 export function toolEditStats(tool: ToolCallItem): LineStats | null {
   const diffs = (tool.content ?? []).filter(

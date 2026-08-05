@@ -22,6 +22,7 @@ import {
 } from "../lib/sessionList";
 import { isPlaceholderSessionTitle } from "../lib/sessionTitle";
 import { markAssistantDone, uid } from "../lib/sessionUpdate";
+import { forgetSessionArtifacts } from "../lib/turnArtifacts";
 import {
   markSideTask,
   unmarkSideTask,
@@ -687,6 +688,8 @@ export function useGrokApp() {
       );
       return;
     }
+
+    forgetSessionArtifacts(id);
 
     if (removeWorktree && worktree && window.grok.removeWorktree) {
       const removed = await window.grok.removeWorktree(worktree.path);

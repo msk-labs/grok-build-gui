@@ -17,6 +17,7 @@ import type {
   WorktreeStatusEvent,
 } from "./acp/sessionManager";
 import type { GrokAccount, GrokUsage } from "./grokAccount";
+import type { OfficeDocument } from "./office/types";
 import type { GrokAuthActionResult } from "./grokAuth";
 import type {
   ComputerUsePermissionCheckResult,
@@ -549,6 +550,34 @@ const api = {
       }
     | { ok: false; error: string }
   > => ipcRenderer.invoke("fs:read-text", opts),
+  /**
+   * OS icon for a document type (the Word/Excel/PowerPoint glyph from Finder).
+   * `dataUrl` is absent when the platform has no icon for the type.
+   */
+  fileIcon: (opts: {
+    root: string;
+    path: string;
+  }): Promise<
+    { ok: true; dataUrl?: string } | { ok: false; error: string }
+  > => ipcRenderer.invoke("fs:file-icon", opts),
+  /** Parse a spreadsheet / Word / PowerPoint file for the Office viewers. */
+  readOfficeDoc: (opts: {
+    root: string;
+    path: string;
+    /** Which workbook sheet to materialize; defaults to the first. */
+    sheet?: string;
+  }): Promise<
+    | { ok: true; path: string; doc: OfficeDocument }
+    | { ok: false; error: string }
+  > => ipcRenderer.invoke("fs:read-office", opts),
+  /** Write an edited grid back to a csv/tsv/xlsx file. */
+  writeSheet: (opts: {
+    root: string;
+    path: string;
+    sheet: string;
+    rows: string[][];
+  }): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke("fs:write-sheet", opts),
   /** Load imagine/session image from disk for inline chat display. */
   readImageDataUrl: (
     filePath: string,
@@ -727,6 +756,16 @@ const api = {
     on("agent:permission-timeout", (p) => cb(p as { requestId: string })),
   onTurn: (cb: (event: TurnEvent) => void) =>
     on("agent:turn", (p) => cb(p as TurnEvent)),
+  /**
+   * Previewable files a finished turn left in the workspace. Arrives shortly
+   * after `agent:turn` stopped — the scan must not delay the end of the turn.
+   */
+  onTurnArtifacts: (
+    cb: (event: { sessionId: string; paths: string[] }) => void,
+  ) =>
+    on("agent:turn-artifacts", (p) =>
+      cb(p as { sessionId: string; paths: string[] }),
+    ),
   onLog: (cb: (entry: { level: string; text: string }) => void) =>
     on("agent:log", (p) => cb(p as { level: string; text: string })),
   onComputerUseStatus: (cb: (status: ComputerUseStatus) => void) =>

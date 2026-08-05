@@ -8,6 +8,11 @@ import {
 import { basename } from "../../../lib/lineDiff";
 import { FileTree } from "./FileTree";
 import { PanelSideIcon, RefreshIcon } from "./fileIcons";
+import { OfficeView } from "../office/OfficeView";
+import {
+  isLegacyOfficeBinary,
+  officeKindForPath,
+} from "../office/officeKind";
 import type { FilePreview } from "./types";
 import { useTranslation } from "react-i18next";
 
@@ -51,6 +56,13 @@ export function FilesPane({ workspaceRoot }: Props) {
 
   const loadPreview = useCallback(
     async (filePath: string) => {
+      // Office files are read by their own parser inside OfficeView.
+      if (officeKindForPath(filePath) || isLegacyOfficeBinary(filePath)) {
+        setPreview(null);
+        setPreviewError(null);
+        setPreviewLoading(false);
+        return;
+      }
       if (!root || !window.grok?.readTextFile) {
         setPreviewError(t("files.workspaceUnavailable"));
         setPreview(null);
@@ -128,6 +140,10 @@ export function FilesPane({ workspaceRoot }: Props) {
   }
 
   const title = selectedPath ? basename(selectedPath) : null;
+  const isOffice = selectedPath
+    ? officeKindForPath(selectedPath) !== null ||
+      isLegacyOfficeBinary(selectedPath)
+    : false;
 
   return (
     <div className="files-pane" aria-label={t("files.label")}>
@@ -188,6 +204,12 @@ export function FilesPane({ workspaceRoot }: Props) {
             <div className="files-pane-preview-empty">
               {t("files.selectPreview")}
             </div>
+          ) : isOffice ? (
+            <OfficeView
+              key={`${selectedPath}:${refreshKey}`}
+              root={root}
+              path={selectedPath}
+            />
           ) : previewLoading ? (
             <div className="files-pane-preview-empty">
               {t("common.loading")}

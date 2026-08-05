@@ -292,6 +292,7 @@ export function AssistantMessage({
             streaming={m.streaming}
             createdAt={m.createdAt}
             finishedAt={m.finishedAt}
+            artifacts={m.artifacts}
             onOpenFile={onOpenFile}
             workspaceRoot={workspaceRoot}
             highlightQuery={highlightQuery}

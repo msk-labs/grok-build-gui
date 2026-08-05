@@ -15,6 +15,7 @@ import {
   type SlashCommand,
 } from "../slashCommands.js";
 import { buildSystemProxyEnvironment } from "../systemProxy.js";
+import { scanWorkspaceArtifacts } from "../workspaceArtifacts.js";
 import {
   readReasoningEffortPreference,
   writeReasoningEffortPreference,
@@ -595,6 +596,12 @@ export class SessionManager {
   private activeCwd = "";
   /** In-flight turns keyed by sessionId — multiple sessions may run at once. */
   private runningTurns = new Map<string, AbortController>();
+  /**
+   * Workspace root and start time per in-flight turn, captured at prompt time.
+   * Recorded up front because a background turn may finish long after the user
+   * switched workspaces, and `activeCwd` would then point somewhere else.
+   */
+  private turnScans = new Map<string, { root: string; startedAt: number }>();
   private state: ConnectionState = { status: "disconnected" };
   private pendingPermissions = new Map<string, PendingPermission>();
   private permissionSeq = 0;
@@ -2296,6 +2303,14 @@ export class SessionManager {
 
     const abort = new AbortController();
     this.runningTurns.set(targetSessionId, abort);
+    const scanRoot =
+      this.worktrees.get(targetSessionId)?.path || this.activeCwd;
+    if (scanRoot) {
+      this.turnScans.set(targetSessionId, {
+        root: scanRoot,
+        startedAt: Date.now(),
+      });
+    }
     this.send("agent:turn", { status: "started", sessionId: targetSessionId });
 
     let result: { ok: boolean; error?: string } = { ok: true };
@@ -2378,6 +2393,9 @@ export class SessionManager {
               ? "cancelled"
               : response?.stopReason,
           });
+          // Deliberately not awaited: the turn must end without waiting on a
+          // filesystem walk. Chips appear a moment later.
+          void this.emitTurnArtifacts(targetSessionId);
         }
       }
       // else: cancel already notified the UI
@@ -2402,6 +2420,8 @@ export class SessionManager {
       if (this.runningTurns.get(targetSessionId) === abort) {
         this.runningTurns.delete(targetSessionId);
       }
+      // A turn that errored or was cancelled never reaches emitTurnArtifacts.
+      this.turnScans.delete(targetSessionId);
       await this.endComputerUseTurn(targetSessionId, "turn-ended");
     }
 
@@ -2415,6 +2435,33 @@ export class SessionManager {
     }
 
     return result;
+  }
+
+  /**
+   * Report previewable files the turn produced.
+   *
+   * The agent does not tell us: writing a spreadsheet through a shell command
+   * arrives as an `execute` tool call with no diff and no locations, so the
+   * transcript has nothing to link to. We look at the workspace instead.
+   *
+   * Reads and clears the turn record synchronously — `prompt()`'s `finally`
+   * runs before the first await below.
+   */
+  private async emitTurnArtifacts(sessionId: string): Promise<void> {
+    const scan = this.turnScans.get(sessionId);
+    this.turnScans.delete(sessionId);
+    if (!scan) return;
+
+    try {
+      const paths = await scanWorkspaceArtifacts(scan.root, {
+        since: scan.startedAt,
+      });
+      if (paths.length > 0) {
+        this.send("agent:turn-artifacts", { sessionId, paths });
+      }
+    } catch {
+      // Best-effort enrichment — never surface a scan failure as a turn error.
+    }
   }
 
   /**

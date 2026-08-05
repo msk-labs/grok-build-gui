@@ -124,6 +124,12 @@ export type ChatMessage =
       createdAt: number;
       /** When the turn finished (for "Worked for Xm Ys"). */
       finishedAt?: number;
+      /**
+       * Workspace-relative files the turn produced that no tool call reported
+       * — e.g. a spreadsheet written by a shell command. Detected after the
+       * turn ends, so this arrives later than `blocks`.
+       */
+      artifacts?: string[];
     }
   | {
       id: string;

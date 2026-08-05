@@ -468,6 +468,21 @@ export const en = {
   "files.revealFolder": "Reveal in Folder",
   "files.systemDefault": "System default",
 
+  "office.kind.sheet": "Spreadsheet",
+  "office.kind.doc": "Document",
+  "office.kind.slides": "Presentation",
+  "office.kind.unsupported": "Unsupported",
+  "office.openExternally": "Open externally",
+  "office.truncated": "Preview truncated",
+  "office.readOnly": "Read-only format",
+  "office.save": "Save",
+  "office.saving": "Saving…",
+  "office.discard": "Discard",
+  "office.saveBeforeSwitch": "Save or discard your changes before switching",
+  "office.showMore": "Show more ({{shown}} of {{total}} rows)",
+  "office.unsupportedHint":
+    "This legacy format cannot be previewed in-app. Open it externally to view it.",
+
   "plugins.title": "Plugins",
   "plugins.subtitle":
     "Install, enable, or remove Grok plugins (skills, MCP, hooks).",

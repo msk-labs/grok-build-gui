@@ -9,6 +9,11 @@ import { promisify } from "node:util";
 import { app, ipcMain, nativeImage, shell } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  readOfficeDocument,
+  writeSheet,
+  type OfficeDocument,
+} from "./office/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -337,6 +342,48 @@ async function appIconDataUrl(appPath: string): Promise<string | undefined> {
   }
 
   iconCache.set(appPath, url);
+  return url;
+}
+
+/** CSS size of a document icon in the file rows; 2× bitmap for Retina. */
+const DOC_ICON_CSS_PX = 16;
+const DOC_ICON_BITMAP_PX = DOC_ICON_CSS_PX * 2;
+/**
+ * Keyed by extension, not path: the OS returns the same icon for every file of
+ * a type, so one lookup covers a whole list of spreadsheets.
+ */
+const docIconCache = new Map<string, string | undefined>();
+
+/**
+ * The icon the OS shows for this document type — the Word/Excel/PowerPoint
+ * glyph the user already recognises from Finder, including whichever suite is
+ * actually registered as the handler on their machine.
+ */
+async function documentIconDataUrl(
+  filePath: string,
+): Promise<string | undefined> {
+  const key = path.extname(filePath).toLowerCase();
+  if (!key) return undefined;
+  if (docIconCache.has(key)) return docIconCache.get(key);
+
+  let url: string | undefined;
+  try {
+    const img = await app.getFileIcon(filePath, { size: "normal" });
+    if (img && !img.isEmpty()) {
+      const sized = img.resize({
+        width: DOC_ICON_BITMAP_PX,
+        height: DOC_ICON_BITMAP_PX,
+        quality: "best",
+      });
+      const data = sized.isEmpty() ? "" : sized.toDataURL();
+      // A near-empty data URL means the platform gave us a blank placeholder.
+      if (data.length > 64) url = data;
+    }
+  } catch {
+    url = undefined;
+  }
+
+  docIconCache.set(key, url);
   return url;
 }
 
@@ -674,6 +721,81 @@ export function registerFilesIpc() {
         const safe = await resolveSafe(opts?.root, opts?.path);
         if ("error" in safe) return { ok: false, error: safe.error };
         return await openWithApp(safe.target, opts?.appPath ?? "");
+      } catch (e) {
+        return {
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  );
+
+  /** OS icon for a document type, for file rows in the transcript. */
+  ipcMain.handle(
+    "fs:file-icon",
+    async (
+      _e,
+      opts: { root: string; path: string },
+    ): Promise<
+      { ok: true; dataUrl?: string } | { ok: false; error: string }
+    > => {
+      try {
+        const safe = await resolveSafe(opts?.root, opts?.path);
+        if ("error" in safe) return { ok: false, error: safe.error };
+        return { ok: true, dataUrl: await documentIconDataUrl(safe.target) };
+      } catch (e) {
+        return {
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  );
+
+  /** Parse a spreadsheet / Word / PowerPoint file for the in-app viewers. */
+  ipcMain.handle(
+    "fs:read-office",
+    async (
+      _e,
+      opts: { root: string; path: string; sheet?: string },
+    ): Promise<
+      | { ok: true; path: string; doc: OfficeDocument }
+      | { ok: false; error: string }
+    > => {
+      try {
+        const safe = await resolveSafe(opts?.root, opts?.path);
+        if ("error" in safe) return { ok: false, error: safe.error };
+        const doc = await readOfficeDocument(safe.target, {
+          sheet: opts?.sheet,
+        });
+        return { ok: true, path: safe.target, doc };
+      } catch (e) {
+        return {
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  );
+
+  /** Write an edited grid back to a csv/tsv/xlsx file. */
+  ipcMain.handle(
+    "fs:write-sheet",
+    async (
+      _e,
+      opts: { root: string; path: string; sheet: string; rows: string[][] },
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      try {
+        const safe = await resolveSafe(opts?.root, opts?.path);
+        if ("error" in safe) return { ok: false, error: safe.error };
+        if (!Array.isArray(opts?.rows)) {
+          return { ok: false, error: "Missing rows" };
+        }
+        const rows = opts.rows.map((row) =>
+          (Array.isArray(row) ? row : []).map((cell) => String(cell ?? "")),
+        );
+        await writeSheet(safe.target, opts?.sheet ?? "", rows);
+        return { ok: true };
       } catch (e) {
         return {
           ok: false,

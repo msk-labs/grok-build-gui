@@ -113,6 +113,7 @@ describe("GUI /computer submission", () => {
       onPermission: vi.fn(noopSubscription),
       onPermissionTimeout: vi.fn(noopSubscription),
       onTurn: vi.fn(noopSubscription),
+      onTurnArtifacts: vi.fn(noopSubscription),
     };
     Object.defineProperty(window, "grok", {
       configurable: true,

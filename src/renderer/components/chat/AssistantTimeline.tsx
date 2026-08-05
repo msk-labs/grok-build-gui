@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type { AssistantBlock } from "../../types/chat";
-import { collectFileChanges } from "../../lib/fileChanges";
+import { collectFileChanges, withTurnArtifacts } from "../../lib/fileChanges";
 import type { OpenFileViewRequest } from "./FileChangeBar";
 import { FileChangeBar } from "./FileChangeBar";
 import { HighlightText } from "./HighlightText";
@@ -35,6 +35,7 @@ export function AssistantTimeline({
   streaming,
   createdAt,
   finishedAt,
+  artifacts,
   onOpenFile,
   workspaceRoot,
   highlightQuery,
@@ -43,6 +44,8 @@ export function AssistantTimeline({
   streaming: boolean;
   createdAt: number;
   finishedAt?: number;
+  /** Files found on disk after the turn that no tool call reported. */
+  artifacts?: string[];
   onOpenFile?: (req: OpenFileViewRequest) => void;
   workspaceRoot?: string;
   /** When set, highlight matches in text / thoughts (search jump). */
@@ -91,7 +94,9 @@ export function AssistantTimeline({
     </div>
   );
 
-  const fileChanges = done ? collectFileChanges(blocks) : [];
+  const fileChanges = done
+    ? withTurnArtifacts(collectFileChanges(blocks), artifacts)
+    : [];
 
   return (
     <>

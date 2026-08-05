@@ -9,11 +9,17 @@ import type {
 } from "../../electron/preload";
 import {
   applySessionUpdate,
+  attachTurnArtifacts,
   buildMessagesFromNotifications,
   finalizeHistory,
   markAssistantDone,
   uid,
 } from "../lib/sessionUpdate";
+import {
+  lastAssistantOrdinal,
+  restoreTurnArtifacts,
+  saveTurnArtifacts,
+} from "../lib/turnArtifacts";
 import {
   isProvisionalSessionId,
   mergeLoadedSession,
@@ -163,6 +169,9 @@ export function attachAgentSubscriptions(
                 },
               ];
             }
+            // Replay rebuilds from the agent's updates, which never carried
+            // our workspace-scan results — put them back.
+            messages = restoreTurnArtifacts(sessionId, messages);
             return { ...s, historyReady: true, messages, unreadDone: false };
           }),
         );
@@ -207,6 +216,19 @@ export function attachAgentSubscriptions(
             ? { ...s, messages: applySessionUpdate(s.messages, notification) }
             : s,
         ),
+      );
+    }),
+    window.grok.onTurnArtifacts(({ sessionId, paths }) => {
+      if (!sessionId || !Array.isArray(paths) || paths.length === 0) return;
+      api.setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          // Persisted from inside the updater because the turn ordinal is only
+          // knowable from current state, and there is no session getter here.
+          // Safe under a double-invoked updater: same key, same value.
+          saveTurnArtifacts(sessionId, lastAssistantOrdinal(s.messages), paths);
+          return { ...s, messages: attachTurnArtifacts(s.messages, paths) };
+        }),
       );
     }),
     window.grok.onPermission(api.setPermission),

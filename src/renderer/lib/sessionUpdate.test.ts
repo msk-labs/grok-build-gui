@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { HistoryMessageAccumulator } from "./sessionUpdate";
+import {
+  attachTurnArtifacts,
+  HistoryMessageAccumulator,
+} from "./sessionUpdate";
 
 function replayChunk(sessionUpdate: string, text: string) {
   return {
@@ -32,5 +35,32 @@ describe("HistoryMessageAccumulator", () => {
         { type: "text", text: "First second" },
       ]);
     }
+  });
+});
+
+describe("attachTurnArtifacts", () => {
+  const assistant = {
+    id: "a1",
+    role: "assistant" as const,
+    blocks: [],
+    streaming: false,
+    createdAt: 1,
+  };
+  const user = { id: "u1", role: "user" as const, text: "hi", createdAt: 0 };
+
+  it("attaches to the newest assistant message", () => {
+    const result = attachTurnArtifacts(
+      [user, { ...assistant, id: "a0" }, assistant],
+      ["report.xlsx"],
+    );
+
+    expect(result[1]).toEqual({ ...assistant, id: "a0" });
+    expect(result[2]).toMatchObject({ id: "a1", artifacts: ["report.xlsx"] });
+  });
+
+  it("is a no-op with no paths or no assistant turn", () => {
+    const messages = [user, assistant];
+    expect(attachTurnArtifacts(messages, [])).toBe(messages);
+    expect(attachTurnArtifacts([user], ["a.xlsx"])).toEqual([user]);
   });
 });

@@ -5809,6 +5809,13 @@ mark.search-hit {
   color: var(--text-dim);
 }
 
+/* OS document icon; the bitmap is 2× so it stays sharp on Retina. */
+.file-change-icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
 .file-change-path {
   flex: 1;
   min-width: 0;
@@ -6135,6 +6142,285 @@ mark.search-hit {
 
 .file-view-error {
   color: var(--danger);
+}
+
+/* ── Office viewers (xlsx / docx / pptx) ──────────────── */
+
+/*
+ * Mounted inside either `.file-view-body` (which scrolls) or
+ * `.files-pane-preview-col` (which does not). The viewer owns its own scroll
+ * so both hosts behave the same.
+ */
+.office-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+.office-bar,
+.office-subbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  min-height: 34px;
+}
+
+.office-subbar {
+  background: var(--tool-bg);
+}
+
+.office-subbar-spacer {
+  flex: 1;
+}
+
+.office-bar-kind {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.office-bar-note,
+.office-subbar-note,
+.office-subbar-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-btn {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.office-btn:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.office-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.office-btn.is-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.office-error {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.office-empty {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Spreadsheet ------------------------------------------- */
+
+.office-sheet {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.office-sheet-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.office-sheet-tab {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.office-sheet-tab.is-active {
+  background: var(--bg-input);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.office-sheet-tab:disabled {
+  cursor: default;
+}
+
+.office-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.office-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  font-family: var(--mono);
+  table-layout: fixed;
+}
+
+/*
+ * No max-width here: the workbook's own column widths are applied inline and a
+ * cap would silently override them. Cells clip rather than wrap unless the
+ * workbook asked for wrapping, which the inline style then overrides.
+ */
+.office-grid th,
+.office-grid td {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 7px;
+  text-align: left;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-grid td {
+  min-width: 72px;
+  color: var(--text);
+  /* Workbook text is proportional, not code. */
+  font-family: var(--font);
+}
+
+/* Header row and gutter stay put while the grid scrolls. */
+.office-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--tool-bg);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.office-grid-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--tool-bg);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 500;
+  text-align: right;
+  min-width: 44px;
+}
+
+.office-grid thead .office-grid-gutter {
+  z-index: 3;
+}
+
+.office-grid td.is-editing {
+  padding: 0;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.office-grid-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 3px 7px;
+  border: none;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text);
+}
+
+.office-more {
+  margin: 10px;
+}
+
+/* Word --------------------------------------------------- */
+
+/*
+ * docx-preview emits its own page/paragraph CSS scoped under `.docx-wrapper`.
+ * Everything here is chrome around it — never restyle the document body, or
+ * the layout fidelity that motivated the renderer is lost again.
+ */
+.office-doc {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--tool-bg);
+}
+
+.office-doc-host {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 40px;
+}
+
+.office-doc-host .docx-wrapper {
+  background: transparent;
+  padding: 0;
+}
+
+/* Give each rendered page a sheet-of-paper edge against the grey backing. */
+.office-doc-host .docx-wrapper > section.docx {
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+  background: #fff;
+}
+
+/* PowerPoint --------------------------------------------- */
+
+.office-slides {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--tool-bg);
+}
+
+.office-slides-host {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 12px 32px;
+}
+
+/* The renderer sizes each slide inline; only the framing belongs to us. */
+.office-slides-host > * {
+  box-shadow: var(--shadow);
+  background: #fff;
 }
 
 /* ── Files panel (tree + preview) ─────────────────────── */
