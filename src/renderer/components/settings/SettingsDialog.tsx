@@ -5,6 +5,8 @@ import type { TerminalShellOption } from "../../../electron/terminalShell";
 import type { GuiSettings } from "../../lib/guiSettings";
 import { sttLanguageSettingOptions } from "../../lib/sttLanguage";
 import { ComputerUseSettings } from "./ComputerUseSettings";
+import { ProviderSettings } from "./ProviderSettings";
+import { ModelEndpointSettings } from "./ModelEndpointSettings";
 import { UpdateSettings } from "./UpdateSettings";
 import type { AppUpdate } from "../../hooks/useAppUpdate";
 import {
@@ -12,6 +14,7 @@ import {
   CloseIcon,
   ComputerIcon,
   InterfaceIcon,
+  ProviderIcon,
   UpdateIcon,
   VoiceIcon,
 } from "./settingsIcons";
@@ -30,6 +33,7 @@ const SECTIONS = [
   { id: "interface", labelKey: "settings.interface", Icon: InterfaceIcon },
   { id: "appearance", labelKey: "settings.appearance", Icon: AppearanceIcon },
   { id: "voice", labelKey: "settings.voice", Icon: VoiceIcon },
+  { id: "providers", labelKey: "provider.title", Icon: ProviderIcon },
   { id: "computer", labelKey: "computer.title", Icon: ComputerIcon },
   { id: "update", labelKey: "update.title", Icon: UpdateIcon },
 ] as const satisfies readonly {
@@ -310,6 +314,13 @@ export function SettingsDialog({
                   </div>
                 </div>
               </section>
+            ) : null}
+
+            {section === "providers" ? (
+              <>
+                <ProviderSettings />
+                <ModelEndpointSettings />
+              </>
             ) : null}
 
             {section === "computer" ? <ComputerUseSettings /> : null}

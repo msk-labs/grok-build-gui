@@ -1,9 +1,12 @@
 import {
   useEffect,
+  useMemo,
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { ModelState, PermissionMode } from "../../../electron/preload";
+import { groupModels } from "../../lib/modelGroups";
+import { ModelIcon } from "../ModelIcon";
 import {
   CaptureIcon,
   ChevronDownIcon,
@@ -196,7 +199,8 @@ export function PermissionMenu({
 }
 
 /** Which flyout is open beside a root menu row (click to expand). */
-type ModelSubmenu = "model" | "intensity" | null;
+/** Models render inline; only reasoning effort still nests. */
+type ModelSubmenu = "intensity" | null;
 
 export function ModelMenu({
   menu,
@@ -234,8 +238,6 @@ export function ModelMenu({
     return value || "";
   };
   const intensityLabel = localizeEffort(rawIntensityLabel || currentEffort);
-  const modelName =
-    currentModel?.name || models.currentModelId || t("composer.model");
   const chipLabel = modelChipLabel(
     models.currentModelId,
     currentModel?.name,
@@ -243,6 +245,7 @@ export function ModelMenu({
     intensityLabel,
   );
   const modelOptions = models.availableModels;
+  const modelGroups = useMemo(() => groupModels(modelOptions), [modelOptions]);
   const intensityValue =
     intensityLabel ||
     (currentEffort ? cleanEffortLabel(currentEffort) : "—");
@@ -291,62 +294,55 @@ export function ModelMenu({
         aria-haspopup="menu"
         aria-expanded={menu === "model"}
       >
+        {models.currentModelId ? (
+          <ModelIcon
+            modelId={models.currentModelId}
+            name={currentModel?.name}
+            size={14}
+          />
+        ) : null}
         <span className="composer-chip-label">{chipLabel}</span>
         <ChevronDownIcon />
       </button>
       {menu === "model" && modelOptions.length > 0 ? (
         <div className="composer-menu composer-menu-model" role="menu">
-          <div
-            className={`composer-menu-submenu-wrap${
-              openSub === "model" ? " open" : ""
-            }`}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className={`composer-menu-item${
-                openSub === "model" ? " open" : ""
-              }`}
-              aria-haspopup="menu"
-              aria-expanded={openSub === "model"}
-              onClick={() => toggleSub("model")}
-            >
-              <span className="composer-menu-item-row">
-                  <span className="composer-menu-item-label">
-                    {t("composer.model")}
-                  </span>
-                <span className="composer-menu-item-value">
-                  {modelName}
-                  <ChevronRightIcon />
-                </span>
-              </span>
-            </button>
-            {openSub === "model" ? (
-              <div
-                className="composer-menu composer-menu-submenu"
-                role="menu"
-              >
-                {modelOptions.map((m) => {
-                  const selected = m.modelId === models.currentModelId;
-                  return (
-                    <button
-                      key={m.modelId}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={selected}
-                      className={`composer-menu-item${
-                        selected ? " active" : ""
-                      }`}
-                      onClick={() => selectModel(m.modelId)}
-                    >
-                      <span className="composer-menu-item-label">
-                        {m.name || m.modelId}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+          {/* Models sit at the top level: switching them is why this menu opens. */}
+          <div className="composer-menu-model-list">
+                {modelGroups.map((group, groupIndex) => (
+                  <div key={group.id} role="group" aria-label={t(group.labelKey)}>
+                    {/* A single group needs no heading — it is the whole list. */}
+                    {modelGroups.length > 1 ? (
+                      <>
+                        {groupIndex > 0 ? (
+                          <div className="composer-menu-divider" />
+                        ) : null}
+                        <div className="composer-menu-title">
+                          {t(group.labelKey)}
+                        </div>
+                      </>
+                    ) : null}
+                    {group.models.map((m) => {
+                      const selected = m.modelId === models.currentModelId;
+                      return (
+                        <button
+                          key={m.modelId}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          className={`composer-menu-item${
+                            selected ? " active" : ""
+                          }`}
+                          onClick={() => selectModel(m.modelId)}
+                        >
+                          <span className="composer-menu-item-label model-option">
+                            <ModelIcon modelId={m.modelId} name={m.name} />
+                            {m.name || m.modelId}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
           </div>
 
           {showIntensity && models.currentModelId ? (
@@ -355,6 +351,7 @@ export function ModelMenu({
                 openSub === "intensity" ? " open" : ""
               }`}
             >
+              <div className="composer-menu-divider" />
               <button
                 type="button"
                 role="menuitem"

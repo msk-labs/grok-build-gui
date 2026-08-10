@@ -11,6 +11,10 @@ import type { ChatMessage } from "../../renderer/types/chat";
 import { computerUseManager } from "../computerUse.js";
 import { findGrok } from "../findGrok.js";
 import {
+  managedModelEnvironment,
+  syncManagedModelConfig,
+} from "../providers/modelSync.js";
+import {
   normalizeAgentSlashCommands,
   type SlashCommand,
 } from "../slashCommands.js";
@@ -21,6 +25,7 @@ import {
   writeReasoningEffortPreference,
 } from "./reasoningPreference.js";
 import { GROK_AGENT_STDIO_ARGS } from "./agentProcess.js";
+import { modelResyncArgs } from "./modelResync.js";
 
 /** Grok extension methods use a leading `_` on the wire (ACP convention). */
 const XAI_SESSION_LIST = "_x.ai/session/list";
@@ -966,9 +971,24 @@ export class SessionManager {
       this.grokPath = probe.path;
       this.version = probe.version;
 
+      // Managed models must be registered before the agent starts: it reads its
+      // catalog once, and the relay's port and token are new on every launch.
+      try {
+        await syncManagedModelConfig();
+      } catch (error) {
+        this.send("agent:log", {
+          level: "stderr",
+          text: `Could not prepare managed models: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+
       try {
         const env = await buildSystemProxyEnvironment(process.env, {
           GROK_DISABLE_AUTOUPDATER: "1",
+          // Endpoint API keys travel here, never through config.toml.
+          ...managedModelEnvironment(),
         });
         const child = spawn(probe.path, [...GROK_AGENT_STDIO_ARGS], {
           stdio: ["pipe", "pipe", "pipe"],
@@ -2004,14 +2024,15 @@ export class SessionManager {
       this.activeCwd = targetCwd;
       if (sideTask) this.rememberSideTaskSession(response.sessionId);
       this.applyModelState(response.models);
-      // Apply the preferred effort even when the agent picked the same model:
-      // session/new otherwise keeps the catalog default (often high). The
-      // transcript/session can paint immediately; prompt() waits for the sync.
-      if (this.modelId && this.reasoningEffort) {
+      // session/new starts on the agent's catalog default, so re-apply the
+      // chosen model. The transcript/session can paint immediately; prompt()
+      // waits for the sync.
+      const resync = modelResyncArgs(this.modelId, this.reasoningEffort);
+      if (resync) {
         const sessionId = response.sessionId;
         const sync = this.setModel(
-          this.modelId,
-          this.reasoningEffort,
+          resync.modelId,
+          resync.reasoningEffort,
           false,
         ).then(() => undefined);
         this.modelSyncs.set(sessionId, sync);
@@ -2172,10 +2193,11 @@ export class SessionManager {
       // Loading a session may report its old/catalog default. Start restoring
       // the app preference now, but do not keep the transcript hidden while
       // that independent ACP round-trip completes. prompt() gates on this map.
-      if (this.modelId && this.reasoningEffort) {
+      const resync = modelResyncArgs(this.modelId, this.reasoningEffort);
+      if (resync) {
         const sync = this.setModel(
-          this.modelId,
-          this.reasoningEffort,
+          resync.modelId,
+          resync.reasoningEffort,
           false,
         ).then(() => undefined);
         this.modelSyncs.set(sessionId, sync);
@@ -2545,6 +2567,8 @@ export class SessionManager {
     if (!modelId.trim()) {
       return { ok: false, error: "Missing model id" };
     }
+    const previousModelId = this.modelId;
+    const previousEffort = this.reasoningEffort;
     this.modelId = modelId;
     const requestedEffort =
       typeof reasoningEffort === "string" && reasoningEffort.trim()
@@ -2594,6 +2618,12 @@ export class SessionManager {
       this.setState(this.readyState());
       return { ok: true, models: this.modelState() };
     } catch (e) {
+      // The agent kept the old model, so the picker must not claim otherwise —
+      // a silent mismatch sends prompts to a model the user did not choose.
+      this.modelId = previousModelId;
+      this.reasoningEffort = previousEffort;
+      this.emitModels();
+      if (this.state.status === "ready") this.setState(this.readyState());
       const error = e instanceof Error ? e.message : String(e);
       return { ok: false, error, models: this.modelState() };
     }

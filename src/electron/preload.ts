@@ -20,6 +20,19 @@ import type { GrokAccount, GrokUsage } from "./grokAccount";
 import type { OfficeDocument } from "./office/types";
 import type { GrokAuthActionResult } from "./grokAuth";
 import type {
+  ChatGptActionResult,
+  ChatGptStatus,
+} from "./providers/chatgptProvider";
+import type { NormalizedUsage, ProviderAccount, UsageWindow } from "./providers/types";
+import type {
+  ApiBackend,
+  CustomEndpoint,
+  CustomEndpointInput,
+  CustomModel,
+} from "./providers/customEndpoints";
+import type { EndpointPreset } from "./providers/endpointPresets";
+import type { DiscoveredModel, DiscoveryResult } from "./providers/modelDiscovery";
+import type {
   ComputerUsePermissionCheckResult,
   ComputerUseStatus,
 } from "./computerUse";
@@ -55,6 +68,22 @@ export type {
 };
 export type { GrokAccount, GrokUsage };
 export type { GrokAuthActionResult };
+export type {
+  ChatGptActionResult,
+  ChatGptStatus,
+  NormalizedUsage,
+  ProviderAccount,
+  UsageWindow,
+};
+export type {
+  ApiBackend,
+  CustomEndpoint,
+  CustomEndpointInput,
+  CustomModel,
+  DiscoveredModel,
+  DiscoveryResult,
+  EndpointPreset,
+};
 export type { ComputerUsePermissionCheckResult, ComputerUseStatus };
 export type { SlashCommand };
 export type { UpdateStatus };
@@ -487,6 +516,44 @@ const api = {
     ipcRenderer.invoke("grok:logout"),
   getGrokUsage: (): Promise<GrokUsage> =>
     ipcRenderer.invoke("grok:get-usage"),
+
+  /**
+   * ChatGPT subscription provider. Models reach the agent through a loopback
+   * relay, so signing in or out reconnects the agent to refresh its catalog.
+   */
+  getChatGptStatus: (): Promise<ChatGptStatus> =>
+    ipcRenderer.invoke("provider:chatgpt:get-status"),
+  loginChatGpt: (): Promise<ChatGptActionResult> =>
+    ipcRenderer.invoke("provider:chatgpt:login"),
+  cancelChatGptLogin: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke("provider:chatgpt:cancel-login"),
+  logoutChatGpt: (): Promise<ChatGptActionResult> =>
+    ipcRenderer.invoke("provider:chatgpt:logout"),
+  getChatGptUsage: (): Promise<NormalizedUsage> =>
+    ipcRenderer.invoke("provider:chatgpt:get-usage"),
+
+  /**
+   * User-added model endpoints (vendor APIs and relay gateways). API keys go
+   * in and are never returned — `hasApiKey` is all the renderer learns.
+   */
+  listModelEndpoints: (): Promise<CustomEndpoint[]> =>
+    ipcRenderer.invoke("provider:endpoints:list"),
+  getEndpointPresets: (): Promise<EndpointPreset[]> =>
+    ipcRenderer.invoke("provider:endpoints:presets"),
+  discoverEndpointModels: (options: {
+    endpointId?: string;
+    baseUrl: string;
+    apiKey?: string;
+    apiBackend: ApiBackend;
+  }): Promise<DiscoveryResult> =>
+    ipcRenderer.invoke("provider:endpoints:discover", options),
+  saveModelEndpoint: (
+    input: CustomEndpointInput,
+  ): Promise<
+    { ok: true; endpoint: CustomEndpoint } | { ok: false; error: string }
+  > => ipcRenderer.invoke("provider:endpoints:save", input),
+  removeModelEndpoint: (id: string): Promise<{ ok: true }> =>
+    ipcRenderer.invoke("provider:endpoints:remove", id),
   /**
    * Launch the bundled Grok Build interactive TUI in the system terminal.
    * Optional cwd defaults to the active workspace on the main process.

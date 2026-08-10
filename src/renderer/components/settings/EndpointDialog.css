@@ -1,0 +1,228 @@
+.endpoint-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(520px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.endpoint-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.endpoint-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.endpoint-field > span:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.endpoint-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+}
+
+.endpoint-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.endpoint-key-row,
+.endpoint-provider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.endpoint-provider-row .settings-select {
+  flex: 1;
+  max-width: none;
+}
+
+/*
+ * Customizable select (Chromium 135+): lets each option carry its vendor logo.
+ * Everything here is scoped to the feature query so an engine without it keeps
+ * the plain native dropdown instead of a half-styled one.
+ */
+@supports (appearance: base-select) {
+  .endpoint-provider-select,
+  .endpoint-provider-select::picker(select) {
+    appearance: base-select;
+  }
+
+  .endpoint-provider-select {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .endpoint-provider-select::picker-icon {
+    margin-left: auto;
+    color: var(--text-dim);
+  }
+
+  .endpoint-provider-select::picker(select) {
+    max-height: min(340px, 50vh);
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--bg-elevated);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.16);
+  }
+
+  .endpoint-provider-select option {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 9px;
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .endpoint-provider-select option:hover,
+  .endpoint-provider-select option:focus {
+    background: var(--bg-hover);
+  }
+
+  /* Move the tick to the trailing edge so every row's logo stays aligned. */
+  .endpoint-provider-select option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: var(--accent);
+  }
+}
+
+.endpoint-model-row .model-icon {
+  flex-shrink: 0;
+}
+
+.endpoint-link {
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.endpoint-link:hover {
+  text-decoration: underline;
+}
+
+.endpoint-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.endpoint-toggle input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.endpoint-toggle-hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.endpoint-models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.endpoint-models-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.endpoint-model-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.endpoint-model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.endpoint-model-row:hover {
+  background: var(--bg-hover);
+}
+
+.endpoint-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.endpoint-save {
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.endpoint-save:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.endpoint-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}

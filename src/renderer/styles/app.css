@@ -4842,6 +4842,51 @@ mark.search-hit {
   font-weight: 500;
 }
 
+/* A relay gateway can expose dozens of models — keep the menu bounded. */
+.composer-menu-model-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(320px, 46vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Model rows lead with a vendor badge. */
+.composer-menu-item-label.model-option,
+.composer-menu-item-value.model-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.model-icon {
+  flex-shrink: 0;
+}
+
+/* Fallback badge for a vendor with no logo on file. */
+.model-icon-monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Logos are drawn edge to edge, so give them a little breathing room. */
+.model-icon-logo {
+  padding: 1px;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.composer-chip .model-icon {
+  margin-right: 5px;
+}
+
 .composer-menu-item-desc {
   font-size: 11px;
   color: var(--text-muted);

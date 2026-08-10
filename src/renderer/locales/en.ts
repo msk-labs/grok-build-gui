@@ -527,6 +527,60 @@ export const en = {
   "plugins.sourceRequired": "A plugin source is required.",
   "plugins.nameRequired": "A plugin name is required.",
 
+  "endpoints.title": "Endpoints",
+  "endpoints.description":
+    "Add a vendor API or a relay gateway. Its models join the picker under Custom models once the agent reconnects.",
+  "endpoints.empty": "No endpoints yet.",
+  "endpoints.add": "Add endpoint",
+  "endpoints.addHint": "Point at any OpenAI-compatible API.",
+  "endpoints.addTitle": "Add endpoint",
+  "endpoints.editTitle": "Edit endpoint",
+  "endpoints.provider": "Provider",
+  "endpoints.name": "Name",
+  "endpoints.namePlaceholder": "My relay",
+  "endpoints.baseUrl": "Endpoint URL",
+  "endpoints.apiKey": "API key",
+  "endpoints.getKey": "Get a key",
+  "endpoints.keyPlaceholder": "Paste your API key",
+  "endpoints.keyStored": "Stored — leave blank to keep",
+  "endpoints.show": "Show",
+  "endpoints.hide": "Hide",
+  "endpoints.noKey": "no key",
+  "endpoints.protocol": "Protocol",
+  "endpoints.models_one": "{{count}} model",
+  "endpoints.models_other": "{{count}} models",
+  "endpoints.reasoningEffort": "Supports reasoning effort",
+  "endpoints.reasoningEffortHint":
+    "Adds the reasoning-effort control for this endpoint's models. Only enable it if the provider accepts a reasoning_effort field — others may reject the request.",
+  "endpoints.fetchModels": "Fetch models",
+  "endpoints.fetchHint":
+    "Fetch the endpoint's catalog, then tick the models you want.",
+  "endpoints.loading": "Fetching…",
+  "endpoints.save": "Save",
+
+  "models.groupBuiltin": "Built-in",
+  "models.groupOAuth": "OAuth",
+  "models.groupCustom": "Custom models",
+
+  "provider.title": "Model providers",
+  "provider.description":
+    "Use a ChatGPT subscription alongside Grok. Its models appear in the model picker after the agent reconnects.",
+  "provider.signIn": "Sign in",
+  "provider.signInHint": "Sign in with your ChatGPT account to use its plan.",
+  "provider.signInFailed": "Could not sign in to ChatGPT.",
+  "provider.signOutFailed": "Could not sign out of ChatGPT.",
+  "provider.waitingForBrowser":
+    "Finish signing in in your browser, then return here.",
+  "provider.planWithoutCodex":
+    "{{plan}} does not include Codex model access, so the sign-in was not kept. A paid ChatGPT plan is required.",
+  "provider.sessionExpired": "Session expired",
+  "provider.sessionExpiredHint":
+    "The ChatGPT session could not be refreshed. Sign in again to keep using its models.",
+  "provider.plaintextWarning":
+    "This system has no secure keychain, so the sign-in is stored in a private file instead of encrypted storage.",
+  "provider.tosNotice":
+    "Using a ChatGPT subscription outside OpenAI's own apps may breach its terms; your account carries that risk. Credentials stay on this device.",
+
   "update.title": "Updates",
   "update.current": "Current version",
   "update.check": "Check for updates",
