@@ -1,10 +1,27 @@
+export type GrokSandboxProfile =
+  | "off"
+  | "workspace"
+  | "read-only"
+  | "strict";
+
+export const DEFAULT_GROK_SANDBOX_PROFILE: GrokSandboxProfile = "workspace";
+
 /**
- * Keep long-running servers/background jobs alive without making the agent
- * turn wait for their process exit. Supported by the pinned Grok Build 0.2.111
- * top-level CLI and intentionally placed before the `agent` subcommand.
+ * Build the documented Grok CLI boundary for an ACP stdio runtime.
+ *
+ * The sandbox profile is deliberately explicit. Grok otherwise defaults to
+ * `off`, and a profile is kernel-enforced for the process lifetime, so callers
+ * must spawn the process with the workspace as its cwd and must not reuse it
+ * for a different workspace/profile pair.
  */
-export const GROK_AGENT_STDIO_ARGS = [
-  "--no-wait-for-background",
-  "agent",
-  "stdio",
-] as const;
+export function grokAgentStdioArgs(
+  sandboxProfile: GrokSandboxProfile,
+): string[] {
+  return [
+    "--no-wait-for-background",
+    "--sandbox",
+    sandboxProfile,
+    "agent",
+    "stdio",
+  ];
+}

@@ -11,13 +11,23 @@ export const DEFAULT_REASONING_EFFORTS: ReasoningEffortOption[] = [
   { id: "low", value: "low", label: "low" },
 ];
 
-/** UI labels: high / medium / low only — strip agent "effort" wording. */
+/** Normalize known effort ids and strip redundant agent "effort" wording. */
 export function cleanEffortLabel(value: string, label?: string | null): string {
   const key = value
     .toLowerCase()
     .replace(/[\s_-]*effort$/i, "")
     .trim();
-  if (key === "high" || key === "medium" || key === "low") return key;
+  if (
+    key === "none" ||
+    key === "minimal" ||
+    key === "low" ||
+    key === "medium" ||
+    key === "high" ||
+    key === "xhigh" ||
+    key === "max"
+  ) {
+    return key;
+  }
   const raw = (label && label.trim()) || value;
   const stripped = raw
     .replace(/\beffort\b/gi, "")
@@ -31,8 +41,7 @@ export function effortOptionsForModel(
 ): ReasoningEffortOption[] {
   if (!model?.supportsReasoningEffort) return [];
   const list = model.reasoningEfforts;
-  const source =
-    list && list.length > 0 ? list : DEFAULT_REASONING_EFFORTS;
+  const source = list && list.length > 0 ? list : DEFAULT_REASONING_EFFORTS;
   return source.map((o) => ({
     ...o,
     label: cleanEffortLabel(o.value, o.label),
@@ -49,19 +58,21 @@ export const PERMISSION_OPTIONS: Array<{
     id: "ask",
     label: "Ask for approval",
     shortLabel: "Ask for approval",
-    description: "Always ask before editing outside the workspace or using the network.",
+    description:
+      "Use the workspace sandbox and ask before consequential actions.",
   },
   {
     id: "auto",
     label: "Auto",
     shortLabel: "Auto",
-    description: "Approve routine actions automatically; ask when risk is higher.",
+    description:
+      "Use the workspace sandbox; approve routine actions automatically.",
   },
   {
     id: "always-approve",
     label: "Full access",
     shortLabel: "Full access",
-    description: "Run without permission prompts (YOLO).",
+    description: "Disable the sandbox and permission prompts for new chats.",
   },
 ];
 

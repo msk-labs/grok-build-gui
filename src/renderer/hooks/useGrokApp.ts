@@ -44,6 +44,13 @@ import {
   rememberRecentProject,
 } from "../lib/recentProjects";
 import { createSelectionIntent } from "../lib/selectionIntent";
+import {
+  draftKey,
+  emptyComposerDraft,
+  forgetComposerDraft,
+  switchComposerDraft,
+  type ComposerDraft,
+} from "../lib/composerDrafts";
 import { attachAgentSubscriptions } from "./agentSubscriptions";
 
 export function useGrokApp() {
@@ -54,9 +61,12 @@ export function useGrokApp() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [permission, setPermission] = useState<PermissionRequest | null>(null);
+  const [permissionQueue, setPermissionQueue] = useState<PermissionRequest[]>([]);
+  const permission = permissionQueue[0] ?? null;
   const [defaultCwd, setDefaultCwd] = useState("");
   const [cwd, setCwd] = useState("");
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
   /** ~/Documents/GrokBuildGUI — used to classify task sessions in the sidebar. */
   const [taskWorkspaceRoot, setTaskWorkspaceRoot] = useState("");
   /** Explicitly picked folders; merged with session cwds for the picker menu. */
@@ -69,6 +79,18 @@ export function useGrokApp() {
   const [taskMode, setTaskMode] = useState(false);
   const taskModeRef = useRef(false);
   taskModeRef.current = taskMode;
+  /**
+   * New-chat workspace chip (folder / task mode / worktree). Survives switching
+   * to another session and back — selecting a session overwrites live `cwd` /
+   * `taskMode`, so the draft choice is parked here instead.
+   */
+  type NewChatWorkspace = {
+    cwd: string;
+    taskMode: boolean;
+    worktreeEnabled: boolean;
+    worktreeBaseRef: string;
+  };
+  const newChatWorkspaceRef = useRef<NewChatWorkspace | null>(null);
   /**
    * New-chat draft that should run in an isolated git worktree instead of the
    * project folder itself. Name and base ref are left to the agent.
@@ -128,12 +150,103 @@ export function useGrokApp() {
   sessionsRef.current = sessions;
   const sideTaskIdsRef = useRef(sideTaskIds);
   sideTaskIdsRef.current = sideTaskIds;
+  /** Deleted/pending-deleted ids whose late list/load events must stay hidden. */
+  const suppressedSessionIdsRef = useRef<Set<string>>(new Set());
   const promptQueueRef = useRef(promptQueue);
   promptQueueRef.current = promptQueue;
+  /**
+   * Unsent composer text/attachments keyed by session id (or new-chat key).
+   * Active fields below are the focused row; this map holds the rest.
+   */
+  const draftsRef = useRef<Record<string, ComposerDraft>>({});
+  const inputRef = useRef(input);
+  inputRef.current = input;
+  const pendingImagesRef = useRef(pendingImages);
+  pendingImagesRef.current = pendingImages;
+  const pendingFilesRef = useRef(pendingFiles);
+  pendingFilesRef.current = pendingFiles;
   /** Prevent concurrent drain of the same session. */
   const drainingRef = useRef<Set<string>>(new Set());
   /** Rapid sidebar clicks are last-click-wins; see `selectionIntent`. */
   const selectionRef = useRef(createSelectionIntent());
+
+  function applyComposerDraft(d: ComposerDraft) {
+    setInput(d.input);
+    setPendingImages(d.pendingImages);
+    setPendingFiles(d.pendingFiles);
+    inputRef.current = d.input;
+    pendingImagesRef.current = d.pendingImages;
+    pendingFilesRef.current = d.pendingFiles;
+  }
+
+  function currentComposerDraft(): ComposerDraft {
+    return {
+      input: inputRef.current,
+      pendingImages: pendingImagesRef.current,
+      pendingFiles: pendingFilesRef.current,
+    };
+  }
+
+  /**
+   * Save the focused session's composer draft, then restore the target's.
+   * Call before changing `activeId` so the leave key is still correct.
+   */
+  function swapComposerTo(sessionId: string | null) {
+    const fromKey = draftKey(activeIdRef.current);
+    const toKey = draftKey(sessionId);
+    const { store, draft } = switchComposerDraft(
+      draftsRef.current,
+      fromKey,
+      toKey,
+      currentComposerDraft(),
+    );
+    draftsRef.current = store;
+    applyComposerDraft(draft);
+  }
+
+  /** Empty the visible composer and drop the focused key from the draft map. */
+  function clearActiveComposer() {
+    applyComposerDraft(emptyComposerDraft());
+    draftsRef.current = forgetComposerDraft(
+      draftsRef.current,
+      draftKey(activeIdRef.current),
+    );
+  }
+
+  function setInputValue(value: string) {
+    inputRef.current = value;
+    setInput(value);
+  }
+
+  function applyNewChatWorkspace(ws: NewChatWorkspace) {
+    setCwd(ws.cwd);
+    cwdRef.current = ws.cwd;
+    setTaskMode(ws.taskMode);
+    taskModeRef.current = ws.taskMode;
+    setWorktreeEnabled(ws.worktreeEnabled);
+    worktreeEnabledRef.current = ws.worktreeEnabled;
+    setWorktreeBaseRef(ws.worktreeBaseRef);
+    worktreeBaseRefRef.current = ws.worktreeBaseRef;
+  }
+
+  /** Snapshot the live new-chat workspace chip into the parked draft. */
+  function snapshotNewChatWorkspace() {
+    newChatWorkspaceRef.current = {
+      cwd: cwdRef.current,
+      taskMode: taskModeRef.current,
+      worktreeEnabled: worktreeEnabledRef.current,
+      worktreeBaseRef: worktreeBaseRefRef.current,
+    };
+  }
+
+  /**
+   * Before leaving the new-chat draft for a real session, park the workspace
+   * chip so clearing the folder is not lost when `setCwd(session.cwd)` runs.
+   */
+  function parkNewChatWorkspaceIfDraft() {
+    if (activeIdRef.current !== null) return;
+    snapshotNewChatWorkspace();
+  }
 
   /**
    * `/browser` slash: ask App to open the *right* split and focus its browser tab.
@@ -262,8 +375,21 @@ export function useGrokApp() {
       setContextUsage: (usage) =>
         setContextUsage((prev) => ({ ...prev, [usage.sessionId]: usage })),
       setPermissionMode,
-      setPermission,
+      enqueuePermission: (request) => {
+        setPermissionQueue((current) =>
+          current.some((item) => item.requestId === request.requestId)
+            ? current
+            : [...current, request],
+        );
+      },
+      removePermission: (requestId) => {
+        setPermissionQueue((current) =>
+          current.filter((item) => item.requestId !== requestId),
+        );
+      },
       setSessions: setSessionsWithSideTaskFlags,
+      isSessionSuppressed: (id) => suppressedSessionIdsRef.current.has(id),
+      suppressSession: (id) => suppressedSessionIdsRef.current.add(id),
       setLoadingHistory,
       isSelectionCurrent: (id) => selectionRef.current.isCurrent(id),
       setDefaultCwd,
@@ -360,8 +486,13 @@ export function useGrokApp() {
   /** Adopt `dir` as the draft workspace and push it to the front of recents. */
   function selectProjectCwd(dir: string) {
     if (!canChangeWorkspace || !dir) return;
-    setCwd(dir);
-    setTaskMode(false);
+    applyNewChatWorkspace({
+      cwd: dir,
+      taskMode: false,
+      worktreeEnabled: false,
+      worktreeBaseRef: "",
+    });
+    snapshotNewChatWorkspace();
     rememberRecentProject(dir);
     setStoredRecentProjects(loadRecentProjects());
     // New chats use this workspace; session list stays global (recent).
@@ -381,17 +512,26 @@ export function useGrokApp() {
   /** Clear project folder on the new-chat draft → isolated task workspace mode. */
   function clearWorkspace() {
     if (!canChangeWorkspace) return;
-    setCwd("");
-    setTaskMode(true);
-    setWorktreeEnabled(false);
-    setWorktreeBaseRef("");
+    applyNewChatWorkspace({
+      cwd: "",
+      taskMode: true,
+      worktreeEnabled: false,
+      worktreeBaseRef: "",
+    });
+    snapshotNewChatWorkspace();
   }
 
   /** Flip the draft's worktree opt-in (ignored outside a git checkout). */
   function toggleWorktree(on: boolean) {
     if (!canChangeWorkspace) return;
-    setWorktreeEnabled(on && workspaceGit.isRepo);
-    if (!on) setWorktreeBaseRef("");
+    const enabled = on && workspaceGit.isRepo;
+    setWorktreeEnabled(enabled);
+    worktreeEnabledRef.current = enabled;
+    if (!enabled) {
+      setWorktreeBaseRef("");
+      worktreeBaseRefRef.current = "";
+    }
+    snapshotNewChatWorkspace();
   }
 
   /**
@@ -403,10 +543,15 @@ export function useGrokApp() {
     if (!canChangeWorkspace || !workspaceGit.isRepo) return;
     if (!branch || branch === workspaceGit.branch) {
       setWorktreeBaseRef("");
+      worktreeBaseRefRef.current = "";
+      snapshotNewChatWorkspace();
       return;
     }
     setWorktreeBaseRef(branch);
+    worktreeBaseRefRef.current = branch;
     setWorktreeEnabled(true);
+    worktreeEnabledRef.current = true;
+    snapshotNewChatWorkspace();
   }
 
   /** Reconnect after a fault (startup already auto-connects). */
@@ -467,44 +612,70 @@ export function useGrokApp() {
       const st = await window.grok.getState();
       if (st.status !== "ready") return;
     }
-    setInput("");
-    // Worktree opt-in is per draft, never inherited by the next chat.
-    setWorktreeEnabled(false);
-    setWorktreeBaseRef("");
+    // If already on the new-chat draft, park the latest chip (e.g. user cleared
+    // the folder) before any re-init. Leaving a real session must not overwrite
+    // that park with the session's cwd.
+    parkNewChatWorkspaceIfDraft();
+    // Park the session we leave under its id, then restore the new-chat draft
+    // (unsent text/images typed before switching away stay available).
+    swapComposerTo(null);
     setWorktreeProgress("");
     // A load still in flight must not drag focus back onto the draft.
     selectionRef.current.claimNone();
     setLoadingHistory(false);
     setActiveId(null);
     activeIdRef.current = null;
+    // A draft inherits the mode shown on the composer. Persist it as the next
+    // session profile now that there is no active session target.
+    void window.grok?.setPermissionMode?.(permissionMode, null);
 
     if (workspaceCwd === null) {
       // Explicit task draft (Tasks section +).
-      setCwd("");
-      setTaskMode(true);
+      applyNewChatWorkspace({
+        cwd: "",
+        taskMode: true,
+        worktreeEnabled: false,
+        worktreeBaseRef: "",
+      });
+      snapshotNewChatWorkspace();
     } else if (workspaceCwd) {
-      setCwd(workspaceCwd);
-      setTaskMode(false);
+      applyNewChatWorkspace({
+        cwd: workspaceCwd,
+        taskMode: false,
+        worktreeEnabled: false,
+        worktreeBaseRef: "",
+      });
+      snapshotNewChatWorkspace();
+    } else if (newChatWorkspaceRef.current) {
+      // Restore folder / task-mode choice after visiting another session.
+      applyNewChatWorkspace(newChatWorkspaceRef.current);
     } else {
-      // Inherit last workspace, but start a fresh task draft if last was a task.
+      // First new-chat draft this run: inherit last workspace, but start a
+      // fresh task draft if last was a task.
       const last = lastUsedSessionCwd();
       if (taskWorkspaceRoot && isTaskWorkspaceCwd(last, taskWorkspaceRoot)) {
-        setCwd("");
-        setTaskMode(true);
+        applyNewChatWorkspace({
+          cwd: "",
+          taskMode: true,
+          worktreeEnabled: false,
+          worktreeBaseRef: "",
+        });
       } else if (last) {
-        setCwd(last);
-        setTaskMode(false);
+        applyNewChatWorkspace({
+          cwd: last,
+          taskMode: false,
+          worktreeEnabled: false,
+          worktreeBaseRef: "",
+        });
       } else {
-        setCwd(defaultCwd);
-        setTaskMode(false);
+        applyNewChatWorkspace({
+          cwd: defaultCwd,
+          taskMode: false,
+          worktreeEnabled: false,
+          worktreeBaseRef: "",
+        });
       }
-    }
-    // New chats always start on Auto, regardless of the previous session's mode.
-    setPermissionMode("auto");
-    if (window.grok.setPermissionMode) {
-      void window.grok.setPermissionMode("auto").then((result) => {
-        if (result.permissionMode) setPermissionMode(result.permissionMode);
-      });
+      snapshotNewChatWorkspace();
     }
   }
 
@@ -559,6 +730,7 @@ export function useGrokApp() {
 
   async function closeSideTaskSession(sessionId: string) {
     if (!window.grok || !sessionId) return;
+    suppressedSessionIdsRef.current.add(sessionId);
     setPromptQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
     promptQueueRef.current = promptQueueRef.current.filter(
       (q) => q.sessionId !== sessionId,
@@ -568,7 +740,7 @@ export function useGrokApp() {
       setActiveId(null);
       activeIdRef.current = null;
     }
-    const deleted = await window.grok.deleteSession(sessionId);
+    const deleted = await requestSessionDelete(sessionId);
     if (!deleted.ok) {
       // Keep the id marked so an undeleted scratch session cannot leak into
       // Projects/search on the next agent session-list update.
@@ -636,9 +808,22 @@ export function useGrokApp() {
     });
   }
 
+  /** Normalize IPC rejection and agent-declared failure into one result shape. */
+  async function requestSessionDelete(id: string) {
+    try {
+      return await window.grok!.deleteSession(id);
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   /** Drop a session from local UI state after a successful agent delete. */
   function forgetSessionLocally(id: string) {
     setSessions((prev) => prev.filter((s) => s.id !== id));
+    draftsRef.current = forgetComposerDraft(draftsRef.current, draftKey(id));
     if (sideTaskIdsRef.current.has(id)) {
       const nextIds = unmarkSideTask(sideTaskIdsRef.current, id);
       setSideTaskIds(nextIds);
@@ -648,8 +833,7 @@ export function useGrokApp() {
       selectionRef.current.claimNone();
       setActiveId(null);
       activeIdRef.current = null;
-      setInput("");
-      setPendingImages([]);
+      applyComposerDraft(emptyComposerDraft());
       setLoadingHistory(false);
     }
   }
@@ -680,8 +864,17 @@ export function useGrokApp() {
       setLoadingHistory(false);
     }
 
-    const result = await window.grok.deleteSession(id);
+    // A local: row has no agent id yet. Hide it now; the first-send path will
+    // delete the real id as soon as session/new resolves and will skip prompt.
+    suppressedSessionIdsRef.current.add(id);
+    if (isProvisionalSessionId(id)) {
+      forgetSessionLocally(id);
+      return;
+    }
+
+    const result = await requestSessionDelete(id);
     if (!result.ok) {
+      suppressedSessionIdsRef.current.delete(id);
       console.error("[grok-gui] deleteSession failed:", result.error);
       window.alert(
         localizeUiError(result.error, t, "nav.deleteSessionFailed"),
@@ -739,10 +932,16 @@ export function useGrokApp() {
 
     const errors: string[] = [];
     for (const row of rows) {
-      const result = await window.grok.deleteSession(row.id);
+      suppressedSessionIdsRef.current.add(row.id);
+      if (isProvisionalSessionId(row.id)) {
+        forgetSessionLocally(row.id);
+        continue;
+      }
+      const result = await requestSessionDelete(row.id);
       if (result.ok) {
         forgetSessionLocally(row.id);
       } else {
+        suppressedSessionIdsRef.current.delete(row.id);
         errors.push(result.error || row.id);
         console.error(
           "[grok-gui] deleteSession failed (project):",
@@ -791,8 +990,12 @@ export function useGrokApp() {
       return;
     }
 
-    // Selecting an existing session leaves new-chat task draft mode.
+    // Park new-chat folder/task-mode before session focus overwrites live cwd.
+    parkNewChatWorkspaceIfDraft();
+    // Selecting an existing session leaves new-chat task draft mode (live only;
+    // the parked draft is restored on the next handleNew).
     setTaskMode(false);
+    taskModeRef.current = false;
 
     if (state.status !== "ready") {
       const result = await window.grok.connect(sessionCwd);
@@ -809,8 +1012,15 @@ export function useGrokApp() {
 
     // Session from agent search may not be in the local sidebar list yet.
     if (!row) {
-      setInput("");
-      if (opts?.cwd) setCwd(opts.cwd);
+      // Swap drafts before focus so unsent text/images stay on the left session.
+      swapComposerTo(id);
+      setActiveId(id);
+      activeIdRef.current = id;
+      if (opts?.cwd) {
+        setCwd(opts.cwd);
+        cwdRef.current = opts.cwd;
+      }
+      setLoadingHistory(true);
       const result = await window.grok.loadSession(id, sessionCwd);
       // A newer click owns the UI now — its own load will set the state.
       if (!selection.isCurrent(id)) return;
@@ -836,8 +1046,12 @@ export function useGrokApp() {
       return;
     }
 
-    setInput("");
-    if (row.cwd) setCwd(row.cwd);
+    // Swap drafts before focus so unsent text/images stay on the left session.
+    swapComposerTo(id);
+    if (row.cwd) {
+      setCwd(row.cwd);
+      cwdRef.current = row.cwd;
+    }
     // Own the spinner and focus here rather than waiting for `history-start`:
     // re-clicking a session whose load is still replaying joins that load in
     // the main process, and a joined load emits no second `history-start`.
@@ -867,10 +1081,16 @@ export function useGrokApp() {
    * send the `history-end` that would otherwise have cleared it.
    */
   function focusLoadedSession(row: LocalSession) {
+    // Preserve each session's unsent composer text and attachments.
+    // (New-chat workspace was parked at the start of handleSelect.)
+    swapComposerTo(row.id);
     setActiveId(row.id);
     activeIdRef.current = row.id;
     setLoadingHistory(false);
-    if (row.cwd) setCwd(row.cwd);
+    if (row.cwd) {
+      setCwd(row.cwd);
+      cwdRef.current = row.cwd;
+    }
     patchSession(row.id, (s) => ({ ...s, unreadDone: false }));
     if (window.grok?.focusSession) {
       void window.grok.focusSession(row.id, row.cwd || undefined);
@@ -892,18 +1112,20 @@ export function useGrokApp() {
     }
     if (result.cancelled) return;
     const img = result.image;
-    setPendingImages((prev) => [
-      ...prev,
-      {
-        id: uid("img"),
-        mimeType: img.mimeType,
-        dataUrl: img.dataUrl,
-        width: img.width,
-        height: img.height,
-        // Keep raw base64 for ACP prompt payload.
-        data: img.data,
-      } as ChatImage & { data: string },
-    ]);
+    const nextImg = {
+      id: uid("img"),
+      mimeType: img.mimeType,
+      dataUrl: img.dataUrl,
+      width: img.width,
+      height: img.height,
+      // Keep raw base64 for ACP prompt payload.
+      data: img.data,
+    } as ChatImage & { data: string };
+    setPendingImages((prev) => {
+      const next = [...prev, nextImg];
+      pendingImagesRef.current = next;
+      return next;
+    });
   }
 
   function handleCaptureRegion() {
@@ -911,11 +1133,19 @@ export function useGrokApp() {
   }
 
   function removePendingImage(id: string) {
-    setPendingImages((prev) => prev.filter((i) => i.id !== id));
+    setPendingImages((prev) => {
+      const next = prev.filter((i) => i.id !== id);
+      pendingImagesRef.current = next;
+      return next;
+    });
   }
 
   function removePendingFile(id: string) {
-    setPendingFiles((prev) => prev.filter((f) => f.id !== id));
+    setPendingFiles((prev) => {
+      const next = prev.filter((f) => f.id !== id);
+      pendingFilesRef.current = next;
+      return next;
+    });
   }
 
   async function handleAddFiles(fileList: File[]) {
@@ -926,10 +1156,18 @@ export function useGrokApp() {
       console.warn("[grok-gui] attach:", prepared.errors.join("; "));
     }
     if (prepared.images.length > 0) {
-      setPendingImages((prev) => [...prev, ...prepared.images]);
+      setPendingImages((prev) => {
+        const next = [...prev, ...prepared.images];
+        pendingImagesRef.current = next;
+        return next;
+      });
     }
     if (prepared.files.length > 0) {
-      setPendingFiles((prev) => [...prev, ...prepared.files]);
+      setPendingFiles((prev) => {
+        const next = [...prev, ...prepared.files];
+        pendingFilesRef.current = next;
+        return next;
+      });
     }
   }
 
@@ -1034,9 +1272,9 @@ export function useGrokApp() {
     if (!window.grok) return;
     const { sessionId, promptText, displayText, images, files, skipPaint } =
       opts;
+    const fallbackTitle = shortTitleForPrompt(displayText, images, files);
 
     if (!skipPaint) {
-      const shortTitle = shortTitleForPrompt(displayText, images, files);
       const { userMsg, assistantMsg } = buildOptimisticTurnMessages(
         displayText,
         images,
@@ -1048,8 +1286,8 @@ export function useGrokApp() {
         ...s,
         title:
           s.messages.length === 0 && isPlaceholderSessionTitle(s.title)
-            ? shortTitle
-            : s.title || shortTitle,
+            ? fallbackTitle
+            : s.title || fallbackTitle,
         updatedAt: Date.now(),
         messages: [...s.messages, userMsg, assistantMsg],
         historyReady: true,
@@ -1093,6 +1331,29 @@ export function useGrokApp() {
           },
         ],
       }));
+    }
+
+    // Grok generates titles asynchronously. If the turn finishes (or fails)
+    // without one, persist the same useful fallback already shown in the UI.
+    // This also repairs an older untitled session on its next prompt.
+    if (!suppressedSessionIdsRef.current.has(sessionId)) {
+      try {
+        const listed = await window.grok.listSessions();
+        const row = listed.sessions?.find((s) => s.sessionId === sessionId);
+        if (
+          listed.ok &&
+          row &&
+          isPlaceholderSessionTitle(row.title || row.summary)
+        ) {
+          await window.grok.renameSession(
+            sessionId,
+            fallbackTitle,
+            row.cwd || sessionsRef.current.find((s) => s.id === sessionId)?.cwd,
+          );
+        }
+      } catch (error) {
+        console.warn("[grok-gui] persist fallback session title:", error);
+      }
     }
   }
 
@@ -1225,13 +1486,13 @@ export function useGrokApp() {
     // GUI-local `/browser` — open/close pane; optional remainder goes to agent.
     const browserCmd = text ? parseBrowserSlash(text) : { kind: "none" as const };
     if (browserCmd.kind === "close") {
-      setInput("");
+      setInputValue("");
       await closeBrowser();
       return;
     }
     let promptText = text;
     if (browserCmd.kind === "open") {
-      setInput("");
+      setInputValue("");
       await openBrowser(browserCmd.url);
       if (!browserCmd.agentText && images.length === 0 && files.length === 0) {
         // Pane-only: no agent turn.
@@ -1259,10 +1520,9 @@ export function useGrokApp() {
         : promptText;
 
     // Clear the composer immediately so the first-turn create/prompt path does
-    // not feel frozen while session/new and model sync round-trip.
-    setInput("");
-    setPendingImages([]);
-    setPendingFiles([]);
+    // not feel frozen while session/new and model sync round-trip. Also drop
+    // the saved draft so switching away/back does not resurrect a sent prompt.
+    clearActiveComposer();
 
     // Codex-style first send: paint sidebar row + transcript *before* any
     // session/new IPC so the UI never waits on agent create.
@@ -1355,10 +1615,11 @@ export function useGrokApp() {
           : null;
       if (worktreeOption) setWorktreeProgress(t("worktree.creating"));
       const created = await window.grok
-        .newSession(sessionCwd, worktreeOption)
+        .newSession(sessionCwd, worktreeOption, provisionalId)
         .finally(() => setWorktreeProgress(""));
       setState(created);
       if (created.status !== "ready" || !created.sessionId) {
+        if (suppressedSessionIdsRef.current.delete(provisionalId)) return;
         const stillHere =
           activeIdRef.current === provisionalId ||
           isProvisionalSessionId(activeIdRef.current);
@@ -1384,6 +1645,21 @@ export function useGrokApp() {
       }
 
       const realId = created.sessionId;
+      if (suppressedSessionIdsRef.current.has(provisionalId)) {
+        suppressedSessionIdsRef.current.add(realId);
+        const deleted = await requestSessionDelete(realId);
+        if (!deleted.ok) {
+          // Deletion failed: make the real row visible again and surface the
+          // actual backend error instead of leaving a permanently hidden chat.
+          suppressedSessionIdsRef.current.delete(provisionalId);
+          suppressedSessionIdsRef.current.delete(realId);
+          window.alert(
+            localizeUiError(deleted.error, t, "nav.deleteSessionFailed"),
+          );
+          await refreshSessions();
+        }
+        return;
+      }
       // With a worktree the agent runs somewhere else than the picked folder;
       // the session's real cwd comes back on the ready state.
       const realCwd = created.cwd || sessionCwd;
@@ -1472,7 +1748,7 @@ export function useGrokApp() {
         m.role === "user" && m.id === messageId,
     );
     if (!target?.text) return;
-    setInput(target.text);
+    setInputValue(target.text);
   }
 
   // When any session turn ends, drain its local follow-up queue.
@@ -1490,16 +1766,28 @@ export function useGrokApp() {
 
   function handlePermission(requestId: string, optionId: string | null) {
     void window.grok?.respondPermission(requestId, optionId);
-    setPermission(null);
+    setPermissionQueue((current) =>
+      current.filter((item) => item.requestId !== requestId),
+    );
   }
 
   async function handlePermissionModeChange(mode: PermissionMode) {
+    setScreenshotError(null);
     setPermissionMode(mode);
     if (!window.grok?.setPermissionMode) return;
-    const result = await window.grok.setPermissionMode(mode);
+    const result = await window.grok.setPermissionMode(
+      mode,
+      activeIdRef.current,
+    );
     if (result.permissionMode) setPermissionMode(result.permissionMode);
     if (!result.ok && result.error) {
       console.warn("[grok-gui] setPermissionMode:", result.error);
+      setScreenshotError(result.error);
+      window.setTimeout(() => {
+        setScreenshotError((current) =>
+          current === result.error ? null : current,
+        );
+      }, 6_000);
     }
   }
 
@@ -1560,7 +1848,7 @@ export function useGrokApp() {
     activeId,
     active,
     input,
-    setInput,
+    setInput: setInputValue,
     loadingHistory,
     permission,
     models,

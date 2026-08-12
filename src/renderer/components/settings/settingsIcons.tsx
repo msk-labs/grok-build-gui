@@ -72,6 +72,17 @@ export function UpdateIcon() {
   );
 }
 
+/** Stacked cards — model providers. */
+export function ProviderIcon() {
+  return (
+    <Svg>
+      <path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z" />
+      <path d="m3 12 9 4.5 9-4.5" />
+      <path d="m3 16.5 9 4.5 9-4.5" />
+    </Svg>
+  );
+}
+
 export function CloseIcon() {
   return (
     <Svg>

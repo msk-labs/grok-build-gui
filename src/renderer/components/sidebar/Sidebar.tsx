@@ -54,6 +54,7 @@ export type SidebarProps = {
   /** Switch main content to Settings (from account menu). */
   onOpenSettings?: () => void;
   grokAccount: GrokAccount;
+  onLogin: () => Promise<GrokAuthActionResult>;
   onLogout: () => Promise<GrokAuthActionResult>;
   /** App update state for the footer button. */
   update: AppUpdate;
@@ -82,6 +83,7 @@ export function Sidebar({
   onOpenPlugins,
   onOpenSettings,
   grokAccount,
+  onLogin,
   onLogout,
   update,
   onCollapse,
@@ -359,6 +361,7 @@ export function Sidebar({
         }}
         onOpenSettings={onOpenSettings}
         account={grokAccount}
+        onLogin={onLogin}
         onLogout={onLogout}
         update={update}
       />

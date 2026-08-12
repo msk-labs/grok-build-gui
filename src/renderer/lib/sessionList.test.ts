@@ -187,6 +187,7 @@ describe("session list activity ordering", () => {
       sessionId: "real-session",
       cwd: "/tasks-root/2026-01-01",
       isNew: true,
+      provisionalId,
     });
 
     expect(merged?.id).toBe("real-session");
@@ -194,6 +195,61 @@ describe("session list activity ordering", () => {
     expect(merged?.messages).toHaveLength(2);
     expect(merged?.cwd).toBe("/tasks-root/2026-01-01");
     expect(merged?.running).toBe(true);
+  });
+
+  it("promotes only the provisional row correlated to session/new", () => {
+    const firstId = makeProvisionalSessionId("first");
+    const secondId = makeProvisionalSessionId("second");
+    const row = (id: string, title: string, updatedAt: number): LocalSession => ({
+      id,
+      title,
+      cwd: "/workspace",
+      createdAt: updatedAt,
+      updatedAt,
+      messages: [],
+      historyReady: true,
+      running: true,
+    });
+
+    const merged = mergeLoadedSession(
+      [row(secondId, "second prompt", 2), row(firstId, "first prompt", 1)],
+      {
+        sessionId: "real-first",
+        cwd: "/workspace",
+        isNew: true,
+        provisionalId: firstId,
+      },
+    );
+
+    expect(merged.find((session) => session.id === "real-first")?.title).toBe(
+      "first prompt",
+    );
+    expect(merged.some((session) => session.id === secondId)).toBe(true);
+  });
+
+  it("does not consume a normal provisional row for an uncorrelated side task", () => {
+    const provisionalId = makeProvisionalSessionId("normal-chat");
+    const provisional: LocalSession = {
+      id: provisionalId,
+      title: "normal prompt",
+      cwd: "/workspace",
+      createdAt: 1,
+      messages: [],
+      historyReady: true,
+      running: true,
+    };
+
+    const merged = mergeLoadedSession([provisional], {
+      sessionId: "side-task",
+      cwd: "/workspace",
+      isNew: true,
+      isSideTask: true,
+    });
+
+    expect(merged.some((session) => session.id === provisionalId)).toBe(true);
+    expect(merged.find((session) => session.id === "side-task")?.isSideTask).toBe(
+      true,
+    );
   });
 
   it("adopts provisional into an empty real row without losing transcript", () => {

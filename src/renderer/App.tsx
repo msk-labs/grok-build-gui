@@ -5,6 +5,7 @@ import type {
   GrokAuthActionResult,
 } from "../electron/preload";
 import { LoginScreen } from "./components/auth/LoginScreen";
+import { SignInReminderModal } from "./components/auth/SignInReminderModal";
 import { ChatView } from "./components/chat";
 import type { ChatSearchFocus } from "./components/chat/ChatView";
 import type { OpenFileViewRequest } from "./components/chat/FileChangeBar";
@@ -19,13 +20,14 @@ import {
 } from "./components/layout/sidebarWidth";
 import { PermissionModal } from "./components/PermissionModal";
 import { PluginsPanel } from "./components/plugins";
-import { SettingsDialog } from "./components/settings";
+import { SettingsDialog, type SettingsSection } from "./components/settings";
 import {
   SplitPanel,
   type SplitFocusRequest,
 } from "./components/split-panel";
 import { Sidebar } from "./components/sidebar";
 import type { ChatSearchHit } from "./lib/chatSearch";
+import { selectedModelNeedsGrokLogin } from "./lib/modelAuth";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useGrokApp } from "./hooks/useGrokApp";
 import { useGrokAuth } from "./hooks/useGrokAuth";
@@ -40,6 +42,7 @@ import { resolveUiLanguage } from "./lib/uiLanguage";
 
 /** Settings is a modal, not a view — it must not tear down chat / terminals. */
 type MainView = "chat" | "plugins";
+type PendingGuestSend = () => void | Promise<void>;
 
 export function App() {
   const [guiSettings, setGuiSettings] = useState<GuiSettings>(loadGuiSettings);
@@ -86,13 +89,14 @@ function AuthenticatedApp({
 }) {
   const auth = useGrokAuth();
 
-  if (auth.loading || !auth.account?.loggedIn) {
+  if (auth.loading || (!auth.account?.loggedIn && !auth.skippedLogin)) {
     return (
       <LoginScreen
         loading={auth.loading}
         signingIn={auth.signingIn}
         error={auth.error}
         onLogin={() => void auth.login()}
+        onSkip={auth.skipLogin}
         onCancel={() => void auth.cancelLogin()}
       />
     );
@@ -100,7 +104,8 @@ function AuthenticatedApp({
 
   return (
     <WorkspaceApp
-      account={auth.account}
+      account={auth.account!}
+      onLogin={auth.login}
       onLogout={auth.logout}
       guiSettings={guiSettings}
       onGuiSettingsChange={onGuiSettingsChange}
@@ -110,6 +115,7 @@ function AuthenticatedApp({
 
 type WorkspaceAppProps = {
   account: GrokAccount;
+  onLogin: () => Promise<GrokAuthActionResult>;
   onLogout: () => Promise<GrokAuthActionResult>;
   guiSettings: GuiSettings;
   onGuiSettingsChange: (next: GuiSettings) => void;
@@ -117,6 +123,7 @@ type WorkspaceAppProps = {
 
 function WorkspaceApp({
   account,
+  onLogin,
   onLogout,
   guiSettings,
   onGuiSettingsChange,
@@ -126,6 +133,8 @@ function WorkspaceApp({
   const update = useAppUpdate();
   const [mainView, setMainView] = useState<MainView>("chat");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection>("interface");
   /** Bump after plugin changes so composer reloads slash skills. */
   const [slashRefreshKey, setSlashRefreshKey] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
@@ -133,10 +142,45 @@ function WorkspaceApp({
   /** After search modal pick: scroll + highlight this message. */
   const [chatSearchFocus, setChatSearchFocus] =
     useState<ChatSearchFocus | null>(null);
+  const [pendingGuestSend, setPendingGuestSend] =
+    useState<PendingGuestSend | null>(null);
+  const [guestLoginError, setGuestLoginError] = useState<string | null>(null);
+  const [guestLoginPending, setGuestLoginPending] = useState(false);
 
   function setSidebarCollapsedPersist(next: boolean) {
     setSidebarCollapsed(next);
     saveSidebarCollapsed(next);
+  }
+
+  function openSettings(section: SettingsSection = "interface") {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  }
+
+  function sendWithGuestReminder(action: PendingGuestSend) {
+    if (account.loggedIn || !selectedModelNeedsGrokLogin(app.models)) {
+      void action();
+      return;
+    }
+    setGuestLoginError(null);
+    setPendingGuestSend(() => action);
+  }
+
+  async function loginAndContinueGuestSend() {
+    const action = pendingGuestSend;
+    setGuestLoginPending(true);
+    setGuestLoginError(null);
+    try {
+      const result = await onLogin();
+      if (!result.ok || !result.account.loggedIn) {
+        setGuestLoginError(result.error || t("auth.signInFailed"));
+        return;
+      }
+      setPendingGuestSend(null);
+      if (action) await action();
+    } finally {
+      setGuestLoginPending(false);
+    }
   }
 
   const [rightOpen, setRightOpen] = useState(false);
@@ -315,8 +359,9 @@ function WorkspaceApp({
             onRetryConnect={() => void app.connect()}
             pluginsActive={pluginsActive}
             onOpenPlugins={() => setMainView("plugins")}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => openSettings()}
             grokAccount={account}
+            onLogin={onLogin}
             onLogout={onLogout}
             update={update}
             /* Windows: collapse lives in the custom title bar only. */
@@ -433,7 +478,9 @@ function WorkspaceApp({
                 <Composer
                   value={app.input}
                   onChange={app.setInput}
-                  onSubmit={(text) => void app.handleSubmit(text)}
+                  onSubmit={(text) =>
+                    sendWithGuestReminder(() => app.handleSubmit(text))
+                  }
                   onCancel={app.handleCancel}
                   disabled={
                     app.state.status === "connecting" ||
@@ -462,6 +509,7 @@ function WorkspaceApp({
                   onModelChange={(id, effort) =>
                     void app.handleModelChange(id, effort)
                   }
+                  onConfigureModels={() => openSettings("providers")}
                   contextUsage={app.contextUsage}
                   slashCwd={app.workspaceCwd}
                   slashRefreshKey={slashRefreshKey}
@@ -528,7 +576,9 @@ function WorkspaceApp({
                     app.state.status === "disconnected"
                   }
                   onSubmitSideTask={(sessionId, text, images, files) =>
-                    app.submitSideTaskPrompt(sessionId, text, images, files)
+                    sendWithGuestReminder(() =>
+                      app.submitSideTaskPrompt(sessionId, text, images, files),
+                    )
                   }
                   onCancelSideTask={(sessionId) =>
                     void app.cancelSession(sessionId)
@@ -544,6 +594,7 @@ function WorkspaceApp({
                   onModelChange={(id, effort) =>
                     void app.handleModelChange(id, effort)
                   }
+                  onConfigureModels={() => openSettings("providers")}
                   slashRefreshKey={slashRefreshKey}
                   voiceSttLanguage={guiSettings.voiceSttLanguage}
                   onOpenFile={handleOpenFile}
@@ -571,7 +622,9 @@ function WorkspaceApp({
                   app.state.status === "disconnected"
                 }
                 onSubmitSideTask={(sessionId, text, images, files) =>
-                  app.submitSideTaskPrompt(sessionId, text, images, files)
+                  sendWithGuestReminder(() =>
+                    app.submitSideTaskPrompt(sessionId, text, images, files),
+                  )
                 }
                 onCancelSideTask={(sessionId) =>
                   void app.cancelSession(sessionId)
@@ -587,6 +640,7 @@ function WorkspaceApp({
                 onModelChange={(id, effort) =>
                   void app.handleModelChange(id, effort)
                 }
+                onConfigureModels={() => openSettings("providers")}
                 slashRefreshKey={slashRefreshKey}
                 voiceSttLanguage={guiSettings.voiceSttLanguage}
                 onOpenFile={handleOpenFile}
@@ -598,6 +652,7 @@ function WorkspaceApp({
 
       <SettingsDialog
         open={settingsOpen}
+        initialSection={settingsSection}
         settings={guiSettings}
         onChange={onGuiSettingsChange}
         onClose={() => setSettingsOpen(false)}
@@ -607,6 +662,17 @@ function WorkspaceApp({
       <PermissionModal
         request={app.permission}
         onRespond={app.handlePermission}
+      />
+
+      <SignInReminderModal
+        open={pendingGuestSend !== null}
+        signingIn={guestLoginPending}
+        error={guestLoginError}
+        onCancel={() => {
+          setPendingGuestSend(null);
+          setGuestLoginError(null);
+        }}
+        onLogin={() => void loginAndContinueGuestSend()}
       />
     </div>
   );

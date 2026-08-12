@@ -5,6 +5,8 @@ import type { TerminalShellOption } from "../../../electron/terminalShell";
 import type { GuiSettings } from "../../lib/guiSettings";
 import { sttLanguageSettingOptions } from "../../lib/sttLanguage";
 import { ComputerUseSettings } from "./ComputerUseSettings";
+import { ProviderSettings } from "./ProviderSettings";
+import { ModelEndpointSettings } from "./ModelEndpointSettings";
 import { UpdateSettings } from "./UpdateSettings";
 import type { AppUpdate } from "../../hooks/useAppUpdate";
 import {
@@ -12,12 +14,15 @@ import {
   CloseIcon,
   ComputerIcon,
   InterfaceIcon,
+  ProviderIcon,
   UpdateIcon,
   VoiceIcon,
 } from "./settingsIcons";
 
 export type SettingsDialogProps = {
   open: boolean;
+  /** Category selected whenever the dialog is opened. */
+  initialSection?: SettingsSection;
   settings: GuiSettings;
   onChange: (next: GuiSettings) => void;
   /** Dismiss (Escape / backdrop / close button). */
@@ -30,6 +35,7 @@ const SECTIONS = [
   { id: "interface", labelKey: "settings.interface", Icon: InterfaceIcon },
   { id: "appearance", labelKey: "settings.appearance", Icon: AppearanceIcon },
   { id: "voice", labelKey: "settings.voice", Icon: VoiceIcon },
+  { id: "providers", labelKey: "provider.title", Icon: ProviderIcon },
   { id: "computer", labelKey: "computer.title", Icon: ComputerIcon },
   { id: "update", labelKey: "update.title", Icon: UpdateIcon },
 ] as const satisfies readonly {
@@ -38,7 +44,7 @@ const SECTIONS = [
   Icon: () => ReactElement;
 }[];
 
-type SectionId = (typeof SECTIONS)[number]["id"];
+export type SettingsSection = (typeof SECTIONS)[number]["id"];
 
 const STT_LANGUAGE_OPTIONS = sttLanguageSettingOptions();
 
@@ -63,18 +69,23 @@ function localizedSttOptions(language: string, t: TFunction<"translation">) {
  */
 export function SettingsDialog({
   open,
+  initialSection = "interface",
   settings,
   onChange,
   onClose,
   update,
 }: SettingsDialogProps) {
   const { t, i18n } = useTranslation();
-  const [section, setSection] = useState<SectionId>("interface");
+  const [section, setSection] = useState<SettingsSection>(initialSection);
   const [terminalShells, setTerminalShells] = useState<TerminalShellOption[]>([
     { value: "system", label: t("settings.terminalShellSystem") },
   ]);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const language = i18n.resolvedLanguage ?? i18n.language;
+
+  useEffect(() => {
+    if (open) setSection(initialSection);
+  }, [initialSection, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -310,6 +321,13 @@ export function SettingsDialog({
                   </div>
                 </div>
               </section>
+            ) : null}
+
+            {section === "providers" ? (
+              <>
+                <ProviderSettings />
+                <ModelEndpointSettings />
+              </>
             ) : null}
 
             {section === "computer" ? <ComputerUseSettings /> : null}

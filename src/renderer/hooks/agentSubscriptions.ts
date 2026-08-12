@@ -37,8 +37,13 @@ export type AgentSubscriptionApi = {
   /** Context-window gauge for one session; other sessions keep their values. */
   setContextUsage: (usage: ContextUsage) => void;
   setPermissionMode: (mode: PermissionMode) => void;
-  setPermission: Dispatch<SetStateAction<PermissionRequest | null>>;
+  enqueuePermission: (request: PermissionRequest) => void;
+  removePermission: (requestId: string) => void;
   setSessions: Dispatch<SetStateAction<LocalSession[]>>;
+  /** True for pending/deleted rows whose late IPC events must be ignored. */
+  isSessionSuppressed: (sessionId: string) => boolean;
+  /** Map a deleted provisional request onto the real agent session id. */
+  suppressSession: (sessionId: string) => void;
   setLoadingHistory: (v: boolean) => void;
   /**
    * False for a history load the user has already clicked past. Such events
@@ -93,11 +98,19 @@ export function attachAgentSubscriptions(
         }
         return;
       }
+      const visible = (list ?? []).filter(
+        (session) => !api.isSessionSuppressed(session.sessionId),
+      );
       api.setSessions((prev) =>
-        mergeSessionList(prev, list ?? [], runningSessionIds ?? []),
+        mergeSessionList(
+          prev.filter((session) => !api.isSessionSuppressed(session.id)),
+          visible,
+          runningSessionIds ?? [],
+        ),
       );
     }),
     window.grok.onHistoryStart(({ sessionId }) => {
+      if (api.isSessionSuppressed(sessionId)) return;
       // Superseded load: keep filling its transcript, but leave focus alone.
       if (api.isSelectionCurrent(sessionId)) {
         api.setLoadingHistory(true);
@@ -112,6 +125,7 @@ export function attachAgentSubscriptions(
       );
     }),
     window.grok.onHistoryProgress(({ sessionId, messages: prebuilt }) => {
+      if (api.isSessionSuppressed(sessionId)) return;
       if (!Array.isArray(prebuilt) || prebuilt.length === 0) return;
       api.setSessions((prev) =>
         prev.map((s) =>
@@ -127,6 +141,7 @@ export function attachAgentSubscriptions(
     }),
     window.grok.onHistoryEnd(
       ({ sessionId, error, retired, messages: prebuilt, notifications }) => {
+        if (api.isSessionSuppressed(sessionId)) return;
         // A superseded load finishing must not clear the spinner of the load
         // the user is actually waiting for.
         if (api.isSelectionCurrent(sessionId)) api.setLoadingHistory(false);
@@ -178,7 +193,21 @@ export function attachAgentSubscriptions(
       },
     ),
     window.grok.onSessionLoaded(
-      ({ sessionId, cwd: sessionCwd, isNew, isSideTask, worktree }) => {
+      ({
+        sessionId,
+        cwd: sessionCwd,
+        isNew,
+        clientRequestId,
+        isSideTask,
+        worktree,
+      }) => {
+        if (
+          api.isSessionSuppressed(sessionId) ||
+          (clientRequestId && api.isSessionSuppressed(clientRequestId))
+        ) {
+          api.suppressSession(sessionId);
+          return;
+        }
         // A side task is registered in the shared session store, but it must not
         // steal focus from (or visually clear) the main chat.
         // First-send provisional rows (local:…) are upgraded to the real id —
@@ -199,6 +228,7 @@ export function attachAgentSubscriptions(
             sessionId,
             cwd: sessionCwd,
             isNew,
+            provisionalId: clientRequestId,
             isSideTask,
             worktree,
           }),
@@ -209,7 +239,7 @@ export function attachAgentSubscriptions(
       const n = notification as { sessionId?: string };
       // Route by notification sessionId so background turns keep updating.
       const id = n.sessionId ?? api.getActiveId();
-      if (!id) return;
+      if (!id || api.isSessionSuppressed(id)) return;
       api.setSessions((prev) =>
         prev.map((s) =>
           s.id === id
@@ -219,7 +249,12 @@ export function attachAgentSubscriptions(
       );
     }),
     window.grok.onTurnArtifacts(({ sessionId, paths }) => {
-      if (!sessionId || !Array.isArray(paths) || paths.length === 0) return;
+      if (
+        !sessionId ||
+        api.isSessionSuppressed(sessionId) ||
+        !Array.isArray(paths) ||
+        paths.length === 0
+      ) return;
       api.setSessions((prev) =>
         prev.map((s) => {
           if (s.id !== sessionId) return s;
@@ -231,13 +266,13 @@ export function attachAgentSubscriptions(
         }),
       );
     }),
-    window.grok.onPermission(api.setPermission),
+    window.grok.onPermission(api.enqueuePermission),
     window.grok.onPermissionTimeout(({ requestId }) => {
-      api.setPermission((p) => (p?.requestId === requestId ? null : p));
+      api.removePermission(requestId);
     }),
     window.grok.onTurn((ev) => {
       const id = ev.sessionId;
-      if (!id) return;
+      if (!id || api.isSessionSuppressed(id)) return;
       if (ev.status === "started") {
         api.setSessions((prev) =>
           prev.map((s) =>

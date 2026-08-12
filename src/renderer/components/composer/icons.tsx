@@ -196,6 +196,27 @@ export function ChevronLeftIcon() {
   );
 }
 
+
+/** Pencil used by the custom-model configuration row. */
+export function EditModelIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m4 20 4.3-1 10.3-10.3a2.1 2.1 0 0 0-3-3L5.3 16 4 20Z" />
+      <path d="m13.5 7.5 3 3" />
+    </svg>
+  );
+}
+
 /** Codex send: upward arrow. */
 export function ArrowUpIcon() {
   return (

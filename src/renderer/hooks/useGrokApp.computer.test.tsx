@@ -70,11 +70,16 @@ describe("GUI /computer submission", () => {
     | ((event: SessionLoadedEvent) => void)
     | null = null;
   const prompt = vi.fn<GrokApi["prompt"]>(async () => ({ ok: true }));
-  const newSession = vi.fn(async () => {
+  const newSession = vi.fn(async (
+    _cwd?: string,
+    _worktree?: unknown,
+    clientRequestId?: string,
+  ) => {
     sessionLoaded?.({
       sessionId: "computer-session",
       cwd: "C:\\fixture",
       isNew: true,
+      clientRequestId,
     });
     return {
       ...READY_STATE,
@@ -143,7 +148,11 @@ describe("GUI /computer submission", () => {
 
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
     // Second arg is the worktree opt-in; a plain /computer chat opts out.
-    expect(newSession).toHaveBeenCalledWith("C:\\fixture", null);
+    expect(newSession).toHaveBeenCalledWith(
+      "C:\\fixture",
+      null,
+      expect.stringMatching(/^local:/),
+    );
 
     const [agentText, images, sessionId, files] = prompt.mock.calls[0]!;
     expect(agentText).toContain("Use the Open Computer Use MCP tools");

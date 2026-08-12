@@ -72,6 +72,7 @@ type Props = {
   /** Open Settings main view (replaces chat, Codex-style). */
   onOpenSettings?: () => void;
   account: GrokAccount;
+  onLogin: () => Promise<GrokAuthActionResult>;
   onLogout: () => Promise<GrokAuthActionResult>;
   /** Update control sits beside the account chip; renders only when actionable. */
   update: AppUpdate;
@@ -86,6 +87,7 @@ export function AccountFooter({
   accountMenuRef,
   onOpenSettings,
   account: grokAccount,
+  onLogin,
   onLogout,
   update,
 }: Props) {
@@ -93,6 +95,7 @@ export function AccountFooter({
   const [usage, setUsage] = useState<GrokUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [openingConsole, setOpeningConsole] = useState(false);
 
@@ -101,7 +104,7 @@ export function AccountFooter({
     e.stopPropagation();
     const next = !menuOpen;
     onOpenChange?.(next);
-    if (!next || !window.grok?.getGrokUsage) return;
+    if (!next || !grokAccount.loggedIn || !window.grok?.getGrokUsage) return;
 
     setUsageLoading(true);
     try {
@@ -131,6 +134,23 @@ export function AccountFooter({
       });
     } finally {
       setUsageLoading(false);
+    }
+  }
+
+  async function handleLogin(e: ReactMouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setLoginLoading(true);
+    setLogoutError(null);
+    try {
+      const result = await onLogin();
+      if (!result.ok) {
+        setLogoutError(localizeUiError(result.error, t, "auth.signInFailed"));
+      } else {
+        onOpenChange?.(false);
+      }
+    } finally {
+      setLoginLoading(false);
     }
   }
 
@@ -265,7 +285,11 @@ export function AccountFooter({
               <div className="codex-account-menu-plan">{planLabel}</div>
             </div>
 
-            {usageLoading ? (
+            {!grokAccount.loggedIn ? (
+              <div className="codex-account-menu-status">
+                {t("account.guestModelHint")}
+              </div>
+            ) : usageLoading ? (
               <div className="codex-account-menu-status">
                 {t("account.loadingUsage")}
               </div>
@@ -309,6 +333,17 @@ export function AccountFooter({
                   {logoutError}
                 </div>
               ) : null}
+              {!grokAccount.loggedIn ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="codex-account-menu-item"
+                  onClick={(e) => void handleLogin(e)}
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? t("auth.waiting") : t("auth.signInWithGrok")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
@@ -336,17 +371,19 @@ export function AccountFooter({
                   {t("common.settings")}
                 </button>
               ) : null}
-              <button
-                type="button"
-                role="menuitem"
-                className="codex-account-menu-item"
-                onClick={(e) => void handleLogout(e)}
-                disabled={logoutLoading}
-              >
-                {logoutLoading
-                  ? t("account.signingOut")
-                  : t("account.signOut")}
-              </button>
+              {grokAccount.loggedIn ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="codex-account-menu-item"
+                  onClick={(e) => void handleLogout(e)}
+                  disabled={logoutLoading}
+                >
+                  {logoutLoading
+                    ? t("account.signingOut")
+                    : t("account.signOut")}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}

@@ -48,12 +48,26 @@ import {
 } from "./terminalIpc.js";
 import { fetchGrokUsage, getGrokAccount } from "./grokAccount.js";
 import {
+  cancelChatGptLogin,
+  getChatGptStatus,
+  getChatGptUsage,
+  loginToChatGpt,
+  logoutFromChatGpt,
+  shutdownChatGptProvider,
+} from "./providers/chatgptProvider.js";
+import { ENDPOINT_PRESETS } from "./providers/endpointPresets.js";
+import {
+  discoverEndpointModels,
+  listEndpoints,
+  removeEndpoint,
+  saveEndpoint,
+} from "./providers/modelSync.js";
+import {
   cancelGrokLogin,
   loginToGrok,
   logoutFromGrok,
 } from "./grokAuth.js";
 import { findGrok } from "./findGrok.js";
-import { prewarmScreenCapture } from "./screenshotCapture.js";
 import {
   captureScreenshot,
   type ScreenshotMode,
@@ -457,8 +471,13 @@ function registerIpc() {
 
   ipcMain.handle(
     "agent:new-session",
-    async (_e, cwd?: string, worktree?: WorktreeCreateOptions | null) => {
-      return sessionManager.newSession(cwd, worktree);
+    async (
+      _e,
+      cwd?: string,
+      worktree?: WorktreeCreateOptions | null,
+      clientRequestId?: string,
+    ) => {
+      return sessionManager.newSession(cwd, worktree, clientRequestId);
     },
   );
 
@@ -677,8 +696,12 @@ function registerIpc() {
 
   ipcMain.handle(
     "agent:set-permission-mode",
-    async (_e, mode: "ask" | "auto" | "always-approve") => {
-      return sessionManager.setPermissionMode(mode);
+    async (
+      _e,
+      mode: "ask" | "auto" | "always-approve",
+      sessionId?: string | null,
+    ) => {
+      return sessionManager.setPermissionMode(mode, sessionId);
     },
   );
 
@@ -934,6 +957,63 @@ function registerIpc() {
   ipcMain.handle("grok:get-usage", async () => fetchGrokUsage());
 
   /**
+   * The agent reads its model catalog at startup, so a provider sign-in or
+   * sign-out only takes effect after reconnecting. Skipped when no workspace
+   * is connected yet — the next connect picks the change up anyway.
+   */
+  async function reconnectAgentForModelChange(): Promise<void> {
+    const cwd = sessionManager.getActiveCwd();
+    if (!cwd) return;
+    await sessionManager.connect(cwd);
+  }
+
+  ipcMain.handle("provider:chatgpt:get-status", () => getChatGptStatus());
+
+  ipcMain.handle("provider:chatgpt:login", async () => {
+    const result = await loginToChatGpt();
+    // New models only reach the picker after the agent restarts.
+    if (result.ok) await reconnectAgentForModelChange();
+    return result;
+  });
+
+  ipcMain.handle("provider:chatgpt:cancel-login", () => ({
+    ok: cancelChatGptLogin(),
+  }));
+
+  ipcMain.handle("provider:chatgpt:logout", async () => {
+    const result = await logoutFromChatGpt();
+    if (result.ok) await reconnectAgentForModelChange();
+    return result;
+  });
+
+  ipcMain.handle("provider:chatgpt:get-usage", () => getChatGptUsage());
+
+  ipcMain.handle("provider:endpoints:list", () => listEndpoints());
+
+  ipcMain.handle("provider:endpoints:presets", () => ENDPOINT_PRESETS);
+
+  ipcMain.handle(
+    "provider:endpoints:discover",
+    async (_e, options: Parameters<typeof discoverEndpointModels>[0]) =>
+      discoverEndpointModels(options),
+  );
+
+  ipcMain.handle(
+    "provider:endpoints:save",
+    async (_e, input: Parameters<typeof saveEndpoint>[0]) => {
+      const result = await saveEndpoint(input);
+      if (result.ok) await reconnectAgentForModelChange();
+      return result;
+    },
+  );
+
+  ipcMain.handle("provider:endpoints:remove", async (_e, id: string) => {
+    await removeEndpoint(id);
+    await reconnectAgentForModelChange();
+    return { ok: true };
+  });
+
+  /**
    * Open the system terminal and run the bundled interactive Grok Build TUI
    * (same pinned artifact as ACP). Optional cwd defaults to active workspace.
    */
@@ -1134,10 +1214,6 @@ app.whenReady().then(async () => {
   await refreshComputerUse();
   registerIpc();
   createWindow();
-  void promptForComputerUsePermissions(computerUseManager.getStatus());
-  // Cold desktopCapturer.getSources is slow; warm once so the first region
-  // screenshot does not pay the full first-call cost.
-  prewarmScreenCapture();
 
   // Startup check, deferred so it never competes with first paint or the
   // agent connect. Silent: being offline at launch is not an error banner.
@@ -1148,11 +1224,11 @@ app.whenReady().then(async () => {
   });
 });
 
-let appWorkCleanup: Promise<void> | null = null;
+let windowWorkCleanup: Promise<void> | null = null;
 
-function cleanupAppWork(): Promise<void> {
-  if (appWorkCleanup) return appWorkCleanup;
-  appWorkCleanup = (async () => {
+function cleanupWindowWork(): Promise<void> {
+  if (windowWorkCleanup) return windowWorkCleanup;
+  windowWorkCleanup = (async () => {
     cancelGrokLogin();
     await stopBrowserBridge();
     await shutdownBrowser();
@@ -1160,9 +1236,14 @@ function cleanupAppWork(): Promise<void> {
     await sessionManager.cleanupSideTaskSessions();
     await sessionManager.disconnect();
   })().finally(() => {
-    appWorkCleanup = null;
+    windowWorkCleanup = null;
   });
-  return appWorkCleanup;
+  return windowWorkCleanup;
+}
+
+async function cleanupAppWork(): Promise<void> {
+  await cleanupWindowWork();
+  await shutdownChatGptProvider();
 }
 
 let allowQuit = false;
@@ -1174,8 +1255,10 @@ app.on("window-all-closed", () => {
     return;
   }
   // macOS keeps the app alive after its last window closes, but the renderer
-  // tabs are gone, so their side-task sessions must be cleaned here too.
-  void cleanupAppWork();
+  // tabs are gone, so their sessions must be cleaned here too. Keep the
+  // provider relay alive for app activation: its ephemeral port is part of
+  // the managed model config and remains valid for this main-process lifetime.
+  void cleanupWindowWork();
 });
 
 app.on("before-quit", (event) => {

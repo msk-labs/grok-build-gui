@@ -6,6 +6,16 @@ import type {
 import { useTranslation } from "react-i18next";
 import { localizeUiError } from "../lib/uiError";
 
+const SKIP_GROK_LOGIN_KEY = "grok-gui:skip-grok-login";
+
+function loadSkippedLogin(): boolean {
+  try {
+    return window.localStorage.getItem(SKIP_GROK_LOGIN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function unavailableResult(
   error: string,
   notSignedInLabel: string,
@@ -36,6 +46,7 @@ export function useGrokAuth() {
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [skippedLogin, setSkippedLogin] = useState(loadSkippedLogin);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,9 +56,21 @@ export function useGrokAuth() {
           throw new Error(t("auth.bridgeUnavailable"));
         }
         const next = await window.grok.getGrokAccount();
-        if (!cancelled) setAccount(next);
+        if (!cancelled) {
+          setAccount(next);
+          if (next.loggedIn) {
+            setSkippedLogin(false);
+            window.localStorage.removeItem(SKIP_GROK_LOGIN_KEY);
+          }
+        }
       } catch (cause) {
         if (!cancelled) {
+          setAccount(
+            unavailableResult(
+              t("auth.bridgeUnavailable"),
+              t("account.notSignedIn"),
+            ).account,
+          );
           setError(
             localizeUiError(
               cause instanceof Error ? cause.message : String(cause),
@@ -77,6 +100,10 @@ export function useGrokAuth() {
     try {
       const result = await window.grok.loginGrok();
       setAccount(result.account);
+      if (result.ok && result.account.loggedIn) {
+        setSkippedLogin(false);
+        window.localStorage.removeItem(SKIP_GROK_LOGIN_KEY);
+      }
       if (!result.ok) {
         setError(localizeUiError(result.error, t, "auth.signInFailed"));
       }
@@ -112,7 +139,15 @@ export function useGrokAuth() {
     }
     const result = await window.grok.logoutGrok();
     setAccount(result.account);
+    setSkippedLogin(false);
+    window.localStorage.removeItem(SKIP_GROK_LOGIN_KEY);
     return result;
+  }
+
+  function skipLogin(): void {
+    setError(null);
+    setSkippedLogin(true);
+    window.localStorage.setItem(SKIP_GROK_LOGIN_KEY, "1");
   }
 
   return {
@@ -120,7 +155,9 @@ export function useGrokAuth() {
     loading,
     signingIn,
     error,
+    skippedLogin,
     login,
+    skipLogin,
     cancelLogin,
     logout,
   };

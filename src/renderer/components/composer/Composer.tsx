@@ -79,6 +79,8 @@ export type ComposerProps = {
   onPermissionModeChange: (mode: PermissionMode) => void;
   models: ModelState;
   onModelChange: (modelId: string, reasoningEffort?: string | null) => void;
+  /** Open settings at the model-provider/custom-model category. */
+  onConfigureModels?: () => void;
   /**
    * Context-window gauge next to the model chip. Omit the prop entirely to hide
    * it (panes that do not track usage); null means "no usage reported yet".
@@ -142,6 +144,7 @@ export function Composer({
   onPermissionModeChange,
   models,
   onModelChange,
+  onConfigureModels,
   contextUsage,
   voiceSttLanguage = "auto",
 }: ComposerProps) {
@@ -777,6 +780,7 @@ export function Composer({
               disabled={disabled || voiceActive}
               models={models}
               onModelChange={onModelChange}
+              onConfigureModels={onConfigureModels}
             />
             {/* Absent prop = this pane does not track usage; null = not yet reported. */}
             {contextUsage !== undefined ? (
