@@ -22,6 +22,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { CHATGPT_MODELS, type ChatGptModel } from "./chatgptModels.js";
+import { createCodexStreamAdapter } from "./codexStream.js";
 import {
   extractRateLimitWindows,
   translateResponsesRequest,
@@ -31,8 +32,15 @@ import type { UsageWindow } from "./types.js";
 const DEFAULT_UPSTREAM = "https://chatgpt.com/backend-api/codex";
 /** Guard against a runaway request body; real prompts stay far below this. */
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
+/** Enough to retain ChatGPT's structured JSON error without buffering prompts. */
+const MAX_ERROR_BODY_BYTES = 256 * 1024;
 
-export type FetchLike = typeof fetch;
+/** The relay only posts to one fixed URL. Keeping this narrow lets Electron's
+ * proxy-aware `net.fetch` and the standard fetch interoperate. */
+export type FetchLike = (
+  input: string,
+  init?: RequestInit,
+) => Promise<Response>;
 
 export type RelayProxyDeps = {
   /** Current access token; may refresh internally when close to expiry. */
@@ -56,6 +64,55 @@ export type RelayProxy = {
   close: () => Promise<void>;
 };
 
+type RelayDiagnostic = {
+  at: string;
+  request: {
+    keys: string[];
+    model: unknown;
+    reasoning: unknown;
+    include: unknown;
+    toolTypes: string[];
+    inputTypes: string[];
+    inputRoles: string[];
+  };
+  upstream?: {
+    status: number;
+    error: string;
+    requestId: string | null;
+  };
+};
+
+function diagnosticForRequest(
+  body: Record<string, unknown>,
+): RelayDiagnostic {
+  const tools = Array.isArray(body.tools) ? body.tools : [];
+  const input = Array.isArray(body.input) ? body.input : [];
+  return {
+    at: new Date().toISOString(),
+    request: {
+      keys: Object.keys(body).sort(),
+      model: body.model,
+      reasoning: body.reasoning,
+      include: body.include,
+      toolTypes: tools.map((tool) =>
+        tool && typeof tool === "object"
+          ? String((tool as Record<string, unknown>).type ?? "object")
+          : typeof tool,
+      ),
+      inputTypes: input.map((item) => {
+        if (!item || typeof item !== "object") return typeof item;
+        const row = item as Record<string, unknown>;
+        return String(row.type ?? row.role ?? "object");
+      }),
+      inputRoles: input.map((item) =>
+        item && typeof item === "object"
+          ? String((item as Record<string, unknown>).role ?? "")
+          : "",
+      ),
+    },
+  };
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const payload = Buffer.from(JSON.stringify(body), "utf8");
   res.writeHead(status, {
@@ -75,6 +132,46 @@ function sendError(
   sendJson(res, status, {
     error: { message, type: "grok_gui_relay_error", code },
   });
+}
+
+async function readUpstreamError(upstream: Response): Promise<Buffer> {
+  if (!upstream.body) return Buffer.alloc(0);
+  const reader = upstream.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (total < MAX_ERROR_BODY_BYTES) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    const remaining = MAX_ERROR_BODY_BYTES - total;
+    chunks.push(chunk.subarray(0, remaining));
+    total += Math.min(chunk.byteLength, remaining);
+  }
+  if (total >= MAX_ERROR_BODY_BYTES) await reader.cancel();
+  return Buffer.concat(chunks);
+}
+
+function upstreamErrorSummary(payload: Buffer): string {
+  const raw = payload.toString("utf8").trim();
+  if (!raw) return "empty response body";
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: unknown; code?: unknown; type?: unknown } | unknown;
+      detail?: unknown;
+      message?: unknown;
+    };
+    if (parsed.error && typeof parsed.error === "object") {
+      const error = parsed.error as Record<string, unknown>;
+      return [error.type, error.code, error.message]
+        .filter((part) => typeof part === "string" && part)
+        .join(": ");
+    }
+    const message = parsed.detail ?? parsed.message ?? parsed.error;
+    if (typeof message === "string") return message;
+  } catch {
+    // Keep plain-text upstream errors useful too.
+  }
+  return raw.slice(0, 1_000);
 }
 
 function bearerMatches(header: string | undefined, expected: string): boolean {
@@ -127,6 +224,7 @@ export async function startRelayProxy(
   const upstreamUrl = deps.upstreamUrl ?? DEFAULT_UPSTREAM;
   const models = deps.models ?? CHATGPT_MODELS;
   const token = randomBytes(32).toString("base64url");
+  let lastDiagnostic: RelayDiagnostic | null = null;
 
   async function forwardResponses(
     req: IncomingMessage,
@@ -153,6 +251,7 @@ export async function startRelayProxy(
     const translated = translateResponsesRequest(
       body as Record<string, unknown>,
     );
+    lastDiagnostic = diagnosticForRequest(translated);
     const payload = JSON.stringify(translated);
     const sessionId =
       typeof (body as Record<string, unknown>).session_id === "string"
@@ -160,9 +259,13 @@ export async function startRelayProxy(
         : randomBytes(16).toString("hex");
 
     const abort = new AbortController();
-    req.on("close", () => {
+    const abortUpstream = () => {
       if (!res.writableEnded) abort.abort();
-    });
+    };
+    // `IncomingMessage.close` can describe a normally completed request body;
+    // abort only when the caller actually abandons the request/response.
+    req.once("aborted", abortUpstream);
+    res.once("close", abortUpstream);
 
     let accessToken: string;
     try {
@@ -191,6 +294,9 @@ export async function startRelayProxy(
         if (!res.writableEnded) res.destroy();
         return;
       }
+      deps.onLog?.(
+        `relay upstream request failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       sendError(
         res,
         502,
@@ -238,6 +344,32 @@ export async function startRelayProxy(
     );
     if (usage.length > 0) deps.onUsage?.(usage);
 
+    if (!upstream.ok) {
+      const payload = await readUpstreamError(upstream);
+      const summary = upstreamErrorSummary(payload);
+      if (lastDiagnostic) {
+        lastDiagnostic.upstream = {
+          status: upstream.status,
+          error: summary,
+          requestId:
+            upstream.headers.get("x-request-id") ??
+            upstream.headers.get("request-id"),
+        };
+      }
+      deps.onLog?.(
+        `relay upstream HTTP ${upstream.status}: ${summary}`,
+      );
+      res.writeHead(upstream.status, {
+        "Content-Type":
+          upstream.headers.get("content-type") ??
+          "application/json; charset=utf-8",
+        "Content-Length": String(payload.byteLength),
+        "Cache-Control": "no-store",
+      });
+      res.end(payload);
+      return;
+    }
+
     res.writeHead(upstream.status, {
       "Content-Type":
         upstream.headers.get("content-type") ?? "text/event-stream",
@@ -255,6 +387,7 @@ export async function startRelayProxy(
       // it differ, so narrow to the Node shape `fromWeb` expects.
       await pipeline(
         Readable.fromWeb(upstream.body as NodeReadableStream<Uint8Array>),
+        createCodexStreamAdapter(),
         res,
       );
     } catch (error) {
@@ -291,6 +424,11 @@ export async function startRelayProxy(
             context_window: model.contextWindow,
           })),
         });
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/v1/diagnostics") {
+        sendJson(res, 200, { last: lastDiagnostic });
         return;
       }
 

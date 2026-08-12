@@ -40,6 +40,7 @@ type Props = {
   onRemoveQueued?: (id: string) => void;
   onPermissionModeChange: (mode: PermissionMode) => void;
   onModelChange: (modelId: string, reasoningEffort?: string | null) => void;
+  onConfigureModels?: () => void;
   onOpenFile?: (req: OpenFileViewRequest) => void;
 };
 
@@ -58,6 +59,7 @@ export function SideTaskPane({
   onRemoveQueued,
   onPermissionModeChange,
   onModelChange,
+  onConfigureModels,
   onOpenFile,
 }: Props) {
   const { t } = useTranslation();
@@ -179,6 +181,7 @@ export function SideTaskPane({
         onPermissionModeChange={onPermissionModeChange}
         models={models}
         onModelChange={onModelChange}
+        onConfigureModels={onConfigureModels}
         slashCwd={workspaceRoot}
         slashRefreshKey={slashRefreshKey}
         voiceSttLanguage={voiceSttLanguage}

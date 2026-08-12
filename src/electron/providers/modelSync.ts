@@ -103,6 +103,7 @@ export function discoverEndpointModels(options: {
   baseUrl: string;
   apiKey?: string;
   apiBackend: CustomEndpointInput["apiBackend"];
+  presetId?: string;
 }): Promise<DiscoveryResult> {
   const stored = options.endpointId
     ? getEndpointStore().getApiKey(options.endpointId)
@@ -111,5 +112,6 @@ export function discoverEndpointModels(options: {
     baseUrl: options.baseUrl,
     apiKey: options.apiKey ?? stored ?? "",
     apiBackend: options.apiBackend,
+    presetId: options.presetId,
   });
 }

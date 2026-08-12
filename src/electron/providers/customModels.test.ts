@@ -78,6 +78,23 @@ describe("renderManagedBlock", () => {
     );
   });
 
+  it("marks the provider's declared default instead of assuming the first level", () => {
+    const block = renderManagedBlock([
+      {
+        ...model,
+        reasoningEfforts: ["low", "high", "max"],
+        defaultReasoningEffort: "high",
+      },
+    ]);
+
+    expect(block).toContain(
+      '{ id = "low", value = "low", label = "Low", default = false }',
+    );
+    expect(block).toContain(
+      '{ id = "high", value = "high", label = "High", default = true }',
+    );
+  });
+
   it("says nothing about reasoning effort when the endpoint did not opt in", () => {
     const block = renderManagedBlock([model]);
     expect(block).not.toContain("reasoning_effort");

@@ -36,6 +36,31 @@ describe("parseModelList", () => {
     ).toEqual({ id: "a", contextWindow: 200_000 });
   });
 
+  it("reads OpenRouter reasoning metadata", () => {
+    expect(
+      parseModelList({
+        data: [
+          {
+            id: "vendor/model",
+            supported_parameters: ["temperature", "reasoning_effort"],
+            reasoning: {
+              supported_efforts: ["high", "none"],
+              default_effort: "high",
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: "vendor/model",
+        contextWindow: null,
+        supportedParameters: ["temperature", "reasoning_effort"],
+        advertisedReasoningEfforts: ["high", "none"],
+        advertisedDefaultReasoningEffort: "high",
+      },
+    ]);
+  });
+
   it("drops duplicates and unusable rows", () => {
     expect(
       parseModelList({ data: [{ id: "a" }, { id: "a" }, {}, { id: "  " }, 5] }),
@@ -75,6 +100,30 @@ describe("discoverModels", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe(
       "Bearer sk-1",
     );
+  });
+
+  it("enriches discovered models with provider-specific reasoning metadata", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ data: [{ id: "deepseek-v4-flash" }] }),
+    );
+
+    const result = await discoverModels(
+      { ...endpoint, presetId: "deepseek" },
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      models: [
+        {
+          id: "deepseek-v4-flash",
+          contextWindow: null,
+          supportsReasoningEffort: true,
+          reasoningEfforts: ["low", "high", "max"],
+          defaultReasoningEffort: "high",
+        },
+      ],
+    });
   });
 
   it("uses x-api-key for Anthropic-style endpoints", async () => {

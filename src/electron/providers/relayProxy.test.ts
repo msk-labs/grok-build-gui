@@ -14,6 +14,7 @@ type Harness = {
   usage: UsageWindow[][];
   getAccessToken: ReturnType<typeof vi.fn>;
   refreshAccessToken: ReturnType<typeof vi.fn>;
+  logs: string[];
   post: (body: unknown, token?: string) => Promise<Response>;
 };
 
@@ -27,6 +28,7 @@ async function harness(
     return responder(call, new Request(url, init));
   });
   const usage: UsageWindow[][] = [];
+  const logs: string[] = [];
   const getAccessToken = vi.fn(
     overrides.getAccessToken ?? (async () => "access-1"),
   );
@@ -38,6 +40,7 @@ async function harness(
     getAccountId: () => "acc-1",
     fetchImpl: fetchImpl as unknown as typeof fetch,
     onUsage: (windows) => usage.push(windows),
+    onLog: (message) => logs.push(message),
   });
   running.push(proxy);
 
@@ -47,6 +50,7 @@ async function harness(
     usage,
     getAccessToken,
     refreshAccessToken,
+    logs,
     post: (body, token = proxy.token) =>
       fetch(`${proxy.baseUrl}/responses`, {
         method: "POST",
@@ -93,14 +97,57 @@ describe("startRelayProxy", () => {
     const body = (await response.json()) as { data: Array<{ id: string }> };
 
     expect(response.status).toBe(200);
-    expect(body.data.length).toBeGreaterThan(0);
-    expect(body.data[0]).toMatchObject({ object: "model" });
+    expect(body.data).toEqual([
+      expect.objectContaining({ id: "gpt-5.6-sol", object: "model" }),
+      expect.objectContaining({ id: "gpt-5.6-terra", object: "model" }),
+      expect.objectContaining({ id: "gpt-5.6-luna", object: "model" }),
+      expect.objectContaining({ id: "gpt-5.5", object: "model" }),
+      expect.objectContaining({ id: "gpt-5.2", object: "model" }),
+    ]);
   });
 
   it("answers the health probe without a token", async () => {
     const { proxy } = await harness(() => sse("data: {}\n\n"));
     const response = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
     expect(await response.json()).toEqual({ ok: true });
+  });
+
+  it("exposes a prompt-free diagnostic for the last upstream error", async () => {
+    const { proxy, post } = await harness(
+      () =>
+        new Response(
+          JSON.stringify({ error: { code: "bad_field", message: "Nope" } }),
+          { status: 400, headers: { "x-request-id": "req-1" } },
+        ),
+    );
+    await post({
+      model: "gpt-5.6-sol",
+      input: [{ role: "user", content: "secret prompt" }],
+      tools: [{ type: "function", name: "run" }],
+      reasoning: { effort: "high" },
+    });
+
+    const response = await fetch(`${proxy.baseUrl}/diagnostics`, {
+      headers: { Authorization: `Bearer ${proxy.token}` },
+    });
+    const body = (await response.json()) as {
+      last: {
+        request: Record<string, unknown>;
+        upstream: Record<string, unknown>;
+      };
+    };
+
+    expect(body.last.request).toMatchObject({
+      model: "gpt-5.6-sol",
+      toolTypes: ["function"],
+      inputTypes: ["user"],
+    });
+    expect(body.last.upstream).toEqual({
+      status: 400,
+      error: "bad_field: Nope",
+      requestId: "req-1",
+    });
+    expect(JSON.stringify(body)).not.toContain("secret prompt");
   });
 
   it("attaches ChatGPT headers and the translated body upstream", async () => {
@@ -121,6 +168,28 @@ describe("startRelayProxy", () => {
     expect(request.headers.get("originator")).toBe("codex_cli_rs");
     expect(request.headers.get("session_id")).toBeTruthy();
     expect(await request.json()).toMatchObject({ store: false, stream: true });
+  });
+
+  it("does not abort upstream when the request body finishes normally", async () => {
+    let upstreamSignal: AbortSignal | null = null;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { post } = await harness(async (_call, request) => {
+      upstreamSignal = request.signal;
+      await waiting;
+      return sse("data: done\n\n");
+    });
+
+    const responsePromise = post({ model: "gpt-5.6-sol" });
+    await vi.waitFor(() => expect(upstreamSignal).not.toBeNull());
+    expect(upstreamSignal!.aborted).toBe(false);
+
+    release();
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("data: done\n\n");
   });
 
   it("refreshes once and replays after an upstream 401", async () => {
@@ -219,7 +288,7 @@ describe("startRelayProxy", () => {
   });
 
   it("preserves upstream error status codes", async () => {
-    const { post } = await harness(
+    const { post, logs } = await harness(
       () =>
         new Response(JSON.stringify({ error: { message: "slow down" } }), {
           status: 429,
@@ -232,6 +301,9 @@ describe("startRelayProxy", () => {
     expect(await response.json()).toMatchObject({
       error: { message: "slow down" },
     });
+    expect(logs).toEqual([
+      "relay upstream HTTP 429: slow down",
+    ]);
   });
 
   it("returns 502 when the upstream is unreachable", async () => {

@@ -22,9 +22,13 @@ export type CustomModel = {
   label: string;
   contextWindow: number;
   maxCompletionTokens?: number;
+  /** Tri-state: omitted means the app could not verify this model automatically. */
+  supportsReasoningEffort?: boolean;
+  reasoningEfforts?: string[];
+  defaultReasoningEffort?: string;
 };
 
-/** Effort levels offered when an endpoint opts into reasoning effort. */
+/** Conservative fallback for an unknown relay model manually enabled by the user. */
 export const REASONING_EFFORTS = ["high", "medium", "low"] as const;
 
 export type CustomEndpoint = {
@@ -38,8 +42,8 @@ export type CustomEndpoint = {
   /** True when a key is stored; the key itself never leaves the main process. */
   hasApiKey: boolean;
   /**
-   * Whether this endpoint accepts a `reasoning_effort` field. Opt-in: providers
-   * that reject unknown request fields would fail on every prompt.
+   * Manual fallback for models whose capability could not be detected. New
+   * model-level metadata takes precedence for mixed endpoint catalogs.
    */
   supportsReasoningEffort: boolean;
 };
@@ -68,11 +72,36 @@ export function endpointEnvKey(endpointId: string): string {
 
 /** `[model.<key>]` section name for a custom model. */
 export function customModelConfigKey(modelId: string): string {
-  return `custom-${modelId.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase().replace(/^-|-$/g, "")}`;
+  return `custom-${modelId
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .toLowerCase()
+    .replace(/^-|-$/g, "")}`;
 }
 
 export function normalizeBaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
+}
+
+function reasoningConfigForModel(
+  endpoint: CustomEndpoint,
+  model: CustomModel,
+): { efforts: readonly string[]; defaultEffort?: string } | null {
+  if (model.supportsReasoningEffort === false) return null;
+  if (model.supportsReasoningEffort === true) {
+    const efforts: readonly string[] = model.reasoningEfforts?.length
+      ? model.reasoningEfforts
+      : REASONING_EFFORTS;
+    return {
+      efforts,
+      ...(model.defaultReasoningEffort &&
+      efforts.includes(model.defaultReasoningEffort)
+        ? { defaultEffort: model.defaultReasoningEffort }
+        : {}),
+    };
+  }
+  return endpoint.supportsReasoningEffort
+    ? { efforts: REASONING_EFFORTS }
+    : null;
 }
 
 function writeFileAtomic(file: string, data: Buffer): void {
@@ -163,6 +192,15 @@ export class CustomEndpointStore {
         ...(model.maxCompletionTokens
           ? { maxCompletionTokens: model.maxCompletionTokens }
           : {}),
+        ...(model.supportsReasoningEffort !== undefined
+          ? { supportsReasoningEffort: model.supportsReasoningEffort }
+          : {}),
+        ...(model.reasoningEfforts?.length
+          ? { reasoningEfforts: [...model.reasoningEfforts] }
+          : {}),
+        ...(model.defaultReasoningEffort
+          ? { defaultReasoningEffort: model.defaultReasoningEffort }
+          : {}),
       })),
       hasApiKey: Boolean(keys[id]),
       supportsReasoningEffort: input.supportsReasoningEffort === true,
@@ -201,6 +239,7 @@ export class CustomEndpointStore {
           if (used.has(key)) continue;
         }
         used.add(key);
+        const reasoning = reasoningConfigForModel(endpoint, model);
         managed.push({
           key,
           model: model.id,
@@ -212,8 +251,13 @@ export class CustomEndpointStore {
           ...(model.maxCompletionTokens
             ? { maxCompletionTokens: model.maxCompletionTokens }
             : {}),
-          ...(endpoint.supportsReasoningEffort
-            ? { reasoningEfforts: REASONING_EFFORTS }
+          ...(reasoning
+            ? {
+                reasoningEfforts: reasoning.efforts,
+                ...(reasoning.defaultEffort
+                  ? { defaultReasoningEffort: reasoning.defaultEffort }
+                  : {}),
+              }
             : {}),
         });
       }

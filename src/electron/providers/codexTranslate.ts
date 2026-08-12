@@ -12,12 +12,53 @@ import type { UsageWindow } from "./types.js";
  * Fields the ChatGPT backend rejects or ignores. `previous_response_id` only
  * works with server-side storage, which is off for this endpoint.
  */
-const STRIPPED_FIELDS = ["previous_response_id", "service_tier"] as const;
+const STRIPPED_FIELDS = [
+  "previous_response_id",
+  "service_tier",
+  "max_output_tokens",
+] as const;
 
 /** Sent when the caller supplies no system prompt; the backend requires one. */
 export const DEFAULT_INSTRUCTIONS = "You are a helpful coding assistant.";
 
 export type ResponsesRequest = Record<string, unknown>;
+
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const item = part as Record<string, unknown>;
+      return typeof item.text === "string" ? item.text.trim() : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function extractInstructions(input: unknown): {
+  input: unknown;
+  instructions: string[];
+} {
+  if (!Array.isArray(input)) return { input, instructions: [] };
+  const kept: unknown[] = [];
+  const instructions: string[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") {
+      kept.push(item);
+      continue;
+    }
+    const message = item as Record<string, unknown>;
+    const role = String(message.role ?? "").toLowerCase();
+    if (role !== "system" && role !== "developer") {
+      kept.push(item);
+      continue;
+    }
+    const text = messageText(message.content);
+    if (text) instructions.push(text);
+  }
+  return { input: kept, instructions };
+}
 
 /**
  * Adapt an outbound Responses request:
@@ -35,9 +76,16 @@ export function translateResponsesRequest(
   next.store = false;
   next.stream = true;
 
-  if (typeof next.instructions !== "string" || !next.instructions.trim()) {
-    next.instructions = DEFAULT_INSTRUCTIONS;
-  }
+  // Grok's generic Responses client encodes its system prompt as input
+  // messages. The ChatGPT Codex backend rejects those roles and accepts system
+  // policy only through the top-level `instructions` field.
+  const extracted = extractInstructions(next.input);
+  if (Array.isArray(next.input)) next.input = extracted.input;
+  const callerInstructions =
+    typeof next.instructions === "string" ? next.instructions.trim() : "";
+  next.instructions =
+    [callerInstructions, ...extracted.instructions].filter(Boolean).join("\n\n") ||
+    DEFAULT_INSTRUCTIONS;
 
   const include = new Set(
     Array.isArray(next.include)

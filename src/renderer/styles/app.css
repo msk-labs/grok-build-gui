@@ -4726,11 +4726,182 @@ mark.search-hit {
   box-shadow: var(--shadow);
 }
 
+/* Model picker: compact catalog surface with a fixed header/footer and a
+ * scrollable model list. The detail card deliberately escapes the list so it
+ * can sit beside the hovered row without being clipped by the scrollbar. */
 .composer-menu-model {
-  min-width: 280px;
+  width: 278px;
+  min-width: 278px;
+  padding: 6px;
   /* Flyout submenus must not be clipped by the root panel. */
   max-height: none;
   overflow: visible;
+}
+
+.composer-menu-model-list {
+  max-height: min(270px, 42vh);
+  padding: 1px 0 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.composer-model-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.composer-model-row.active {
+  background: var(--bg-hover);
+}
+
+.composer-model-row > svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.composer-model-row .model-option {
+  min-width: 0;
+  flex: 1;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.composer-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-tag {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.composer-model-tag-accelerated {
+  color: #2563eb;
+  background: #dbeafe;
+}
+
+.composer-model-tag-free {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 11%, var(--bg));
+}
+
+.composer-model-rate {
+  flex: none;
+  min-width: 40px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.composer-menu-item.composer-model-configure {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.composer-model-configure svg {
+  color: var(--text-muted);
+}
+
+.composer-model-detail {
+  position: absolute;
+  left: calc(100% + 8px);
+  z-index: 34;
+  width: 214px;
+  padding: 14px 16px 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+}
+
+.composer-model-detail strong {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.composer-model-detail p {
+  margin: 7px 0 13px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.composer-model-detail-rate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.composer-model-detail-rate span:last-child {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-model-detail-intensity {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+}
+
+.composer-model-detail-title {
+  margin: 0 2px 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.composer-model-intensity-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-model-intensity-option:hover,
+.composer-model-intensity-option.active {
+  background: var(--bg-hover);
+}
+
+.composer-model-intensity-option svg {
+  flex: none;
+  color: var(--accent);
 }
 
 .composer-menu-submenu-wrap {
@@ -5182,6 +5353,17 @@ mark.search-hit {
   /* Keep Allow/Cancel visible above the fold */
   padding-top: 2px;
   background: var(--bg-elevated);
+}
+
+.auth-reminder-modal {
+  width: min(480px, 100%);
+}
+
+.auth-reminder-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* Structured permission dialog (human summary, not raw JSON) */

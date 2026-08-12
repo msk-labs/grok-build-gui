@@ -1,8 +1,8 @@
 /**
  * ChatGPT subscription sign-in (OAuth 2.0 + PKCE).
  *
- * Mirrors the public Codex CLI client registration: the redirect URI is fixed
- * to loopback port 1455, so only one sign-in can run at a time on a machine.
+ * Mirrors the public Codex CLI client registration: the redirect URI uses its
+ * registered loopback port, so only one sign-in can run at a time on a machine.
  * Tokens never leave the main process — see `tokenStore.ts`.
  */
 
@@ -19,7 +19,9 @@ export const OPENAI_OAUTH = {
   /** Registered with OpenAI — the port cannot be changed. */
   redirectPort: 1455,
   redirectPath: "/auth/callback",
-  scope: "openid profile email offline_access",
+  scope:
+    "openid profile email offline_access api.connectors.read api.connectors.invoke",
+  originator: "codex_cli_rs",
 } as const;
 
 export const OPENAI_REDIRECT_URI =
@@ -63,6 +65,7 @@ export function buildAuthorizeUrl(options: {
   // is what makes the id_token carry the ChatGPT account/plan claims.
   url.searchParams.set("id_token_add_organizations", "true");
   url.searchParams.set("codex_cli_simplified_flow", "true");
+  url.searchParams.set("originator", OPENAI_OAUTH.originator);
   return url.toString();
 }
 
@@ -199,19 +202,23 @@ type TokenResponse = {
   error_description?: unknown;
 };
 
+type TokenResponseBody = TokenResponse | string | null;
+
 /** Shape a token endpoint response, raising `OAuthError` on rejection. */
 export function parseTokenResponse(
   status: number,
-  body: unknown,
+  body: TokenResponseBody,
   previous?: TokenSet,
 ): TokenSet {
-  const data = (body ?? {}) as TokenResponse;
+  const data =
+    body && typeof body === "object" ? (body as TokenResponse) : {};
   if (status < 200 || status >= 300) {
     const code =
       typeof data.error === "string" ? data.error : `http_${status}`;
     const message =
       (typeof data.error_description === "string" && data.error_description) ||
       (typeof data.error === "string" && data.error) ||
+      (typeof body === "string" && body.trim()) ||
       `Token request failed (${status}).`;
     throw new OAuthError(code, message);
   }
@@ -240,13 +247,18 @@ export function parseTokenResponse(
   };
 }
 
-export type FetchLike = typeof fetch;
+/** The OAuth client only posts to fixed string endpoints. Keeping this narrow
+ * lets Electron's proxy-aware `net.fetch` and the standard fetch interoperate. */
+export type FetchLike = (
+  input: string,
+  init?: RequestInit,
+) => Promise<Response>;
 
 async function postForm(
   url: string,
   form: Record<string, string>,
   fetchImpl: FetchLike,
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ status: number; body: TokenResponseBody }> {
   const response = await fetchImpl(url, {
     method: "POST",
     headers: {
@@ -255,10 +267,16 @@ async function postForm(
     },
     body: new URLSearchParams(form).toString(),
   });
-  let body: unknown = null;
-  try {
-    body = await response.json();
-  } catch {
+  const rawBody = await response.text();
+  let body: TokenResponseBody = rawBody;
+  if (rawBody) {
+    try {
+      body = JSON.parse(rawBody) as TokenResponse;
+    } catch {
+      // Codex preserves non-JSON auth-service errors because Cloudflare and
+      // proxies often return an HTML or plain-text explanation for a 403.
+    }
+  } else {
     body = null;
   }
   return { status: response.status, body };

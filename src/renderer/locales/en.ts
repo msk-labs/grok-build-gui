@@ -21,7 +21,7 @@ export const en = {
   "language.english": "English",
   "language.chineseSimplified": "Simplified Chinese",
 
-  "auth.signInTitle": "Sign in to continue",
+  "auth.signInTitle": "Sign in to Grok",
   "auth.description":
     "Your browser will open the official xAI authorization page. After you approve access, this app signs in automatically.",
   "auth.completeInBrowser":
@@ -29,6 +29,12 @@ export const en = {
   "auth.checking": "Checking sign-in…",
   "auth.waiting": "Waiting for authorization…",
   "auth.signInWithGrok": "Sign in with Grok",
+  "auth.skipSignIn": "Not now",
+  "auth.guestHint":
+    "Continue without Grok and add a third-party model in Settings.",
+  "auth.sendReminderTitle": "Sign in before using Grok",
+  "auth.sendReminderDescription":
+    "The selected Grok model requires a Grok account. Sign in to send this message, or select a third-party model.",
   "auth.bridgeUnavailable": "The Grok authentication bridge is unavailable.",
   "auth.signInFailed": "Could not sign in to Grok.",
   "auth.notSignedInDetail": "Grok is not signed in.",
@@ -104,6 +110,8 @@ export const en = {
   "account.retryConnect": "Retry connect",
   "account.account": "Grok account",
   "account.notSignedIn": "Not signed in",
+  "account.guestModelHint":
+    "You can use third-party models without signing in to Grok.",
   "account.unknownPlan": "Unknown plan",
   "account.console": "Console",
   "account.openConsoleHint":
@@ -198,7 +206,8 @@ export const en = {
   "worktree.pill": "worktree",
   "worktree.branch": "Current branch",
   "worktree.branchHint": "Pick the branch this chat starts from",
-  "worktree.needGit": "This folder is not a git repository — no worktree possible",
+  "worktree.needGit":
+    "This folder is not a git repository — no worktree possible",
   "worktree.branchCurrent": "current",
   "worktree.branchCount": "Branches ({{count}})",
   "worktree.hint":
@@ -220,10 +229,23 @@ export const en = {
   "composer.permissions": "Permissions",
   "composer.permissionHelp": "How actions are approved",
   "composer.model": "Model",
+  "composer.autoModel": "Auto",
+  "composer.modelAccelerated": "Boosted",
+  "composer.modelFree": "Free",
+  "composer.configureCustomModel": "Configure custom model",
+  "composer.modelBalancedDescription":
+    "Balanced capability, suitable for everyday use",
+  "composer.modelDefaultDescription": "A model available in this workspace",
+  "composer.consumptionSpeed": "Consumption speed",
+  "composer.rateSuffix": "rate",
   "composer.reasoningIntensity": "Reasoning intensity",
-  "composer.effortHigh": "high",
-  "composer.effortMedium": "medium",
+  "composer.effortNone": "off",
+  "composer.effortMinimal": "minimal",
   "composer.effortLow": "low",
+  "composer.effortMedium": "medium",
+  "composer.effortHigh": "high",
+  "composer.effortXHigh": "extra high",
+  "composer.effortMax": "max",
   "composer.contextWindow": "Context window",
   "composer.contextUsedOf":
     "Context window: {{used}} of {{size}} used ({{percent}}%)",
@@ -237,12 +259,13 @@ export const en = {
     "Session total {{tokens}} · {{turns}} turns · {{calls}} model calls",
   "composer.permissionAsk": "Ask for approval",
   "composer.permissionAskDesc":
-    "Always ask before editing outside the workspace or using the network.",
+    "Use the workspace sandbox and ask before consequential actions.",
   "composer.permissionAuto": "Auto",
   "composer.permissionAutoDesc":
-    "Approve routine actions automatically; ask when risk is higher.",
+    "Use the workspace sandbox; approve routine actions automatically.",
   "composer.permissionFull": "Full access",
-  "composer.permissionFullDesc": "Run without permission prompts (YOLO).",
+  "composer.permissionFullDesc":
+    "Disable the sandbox and permission prompts for new chats.",
   "composer.skillsCommands": "Skills & commands",
   "composer.noCommands": "No matching commands",
   "composer.failedLoadSkills": "Failed to load skills",
@@ -551,7 +574,13 @@ export const en = {
   "endpoints.models_other": "{{count}} models",
   "endpoints.reasoningEffort": "Supports reasoning effort",
   "endpoints.reasoningEffortHint":
-    "Adds the reasoning-effort control for this endpoint's models. Only enable it if the provider accepts a reasoning_effort field — others may reject the request.",
+    "Manual fallback for models whose reasoning-effort capability cannot be verified automatically.",
+  "endpoints.reasoningEffortDetected":
+    "Automatically enabled for the selected model based on provider documentation.",
+  "endpoints.reasoningEffortUnavailable":
+    "The selected model does not expose configurable reasoning effort.",
+  "endpoints.reasoningEffortMixed":
+    "Selected models have different reasoning-effort capabilities; unknown models use the manual setting.",
   "endpoints.fetchModels": "Fetch models",
   "endpoints.fetchHint":
     "Fetch the endpoint's catalog, then tick the models you want.",
@@ -588,7 +617,8 @@ export const en = {
   "update.download": "Download",
   "update.update": "Update",
   "update.restart": "Restart",
-  "update.availableHint": "Version {{version}} is available — click to download",
+  "update.availableHint":
+    "Version {{version}} is available — click to download",
   "update.downloadingHint": "Downloading update — {{percent}}%",
   "update.restartHint": "Version {{version}} is ready — restart to install",
   "update.stateIdle": "Not checked yet",
@@ -627,8 +657,7 @@ export const en = {
   "computer.permissionCheckFailed": "Permission check failed.",
   "computer.notPreparedDetail":
     "The built-in Open Computer Use artifact is not prepared.",
-  "computer.versionReadFailed":
-    "Could not read the Open Computer Use version.",
+  "computer.versionReadFailed": "Could not read the Open Computer Use version.",
   "computer.unavailable": "Open Computer Use is not available.",
   "computer.permissionStatusFailed":
     "Could not read the Open Computer Use permission status.",

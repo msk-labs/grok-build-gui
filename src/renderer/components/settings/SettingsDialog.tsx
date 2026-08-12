@@ -21,6 +21,8 @@ import {
 
 export type SettingsDialogProps = {
   open: boolean;
+  /** Category selected whenever the dialog is opened. */
+  initialSection?: SettingsSection;
   settings: GuiSettings;
   onChange: (next: GuiSettings) => void;
   /** Dismiss (Escape / backdrop / close button). */
@@ -42,7 +44,7 @@ const SECTIONS = [
   Icon: () => ReactElement;
 }[];
 
-type SectionId = (typeof SECTIONS)[number]["id"];
+export type SettingsSection = (typeof SECTIONS)[number]["id"];
 
 const STT_LANGUAGE_OPTIONS = sttLanguageSettingOptions();
 
@@ -67,18 +69,23 @@ function localizedSttOptions(language: string, t: TFunction<"translation">) {
  */
 export function SettingsDialog({
   open,
+  initialSection = "interface",
   settings,
   onChange,
   onClose,
   update,
 }: SettingsDialogProps) {
   const { t, i18n } = useTranslation();
-  const [section, setSection] = useState<SectionId>("interface");
+  const [section, setSection] = useState<SettingsSection>(initialSection);
   const [terminalShells, setTerminalShells] = useState<TerminalShellOption[]>([
     { value: "system", label: t("settings.terminalShellSystem") },
   ]);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const language = i18n.resolvedLanguage ?? i18n.language;
+
+  useEffect(() => {
+    if (open) setSection(initialSection);
+  }, [initialSection, open]);
 
   useEffect(() => {
     if (!open) return;

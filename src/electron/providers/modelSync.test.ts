@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({
   app: { getPath: () => hoisted.userData },
+  net: { fetch },
   safeStorage: { isEncryptionAvailable: () => false },
   shell: { openExternal: async () => {} },
 }));
@@ -91,7 +92,12 @@ describe("syncManagedModelConfig", () => {
     await sync.saveEndpoint(relayEndpoint);
 
     const config = configText();
-    expect(config).toContain("[model.chatgpt-");
+    expect(config).toContain("[model.chatgpt-gpt-5-6-sol]");
+    expect(config).toContain("[model.chatgpt-gpt-5-6-terra]");
+    expect(config).toContain("[model.chatgpt-gpt-5-6-luna]");
+    expect(config).toContain("[model.chatgpt-gpt-5-5]");
+    expect(config).toContain("[model.chatgpt-gpt-5-2]");
+    expect(config).not.toContain("gpt-5-3");
     expect(config).toContain("[model.custom-deepseek-chat]");
     // One managed region, not two competing ones.
     expect(config.match(/grok-gui managed models — edited/g)).toHaveLength(1);

@@ -46,6 +46,10 @@ describe("buildAuthorizeUrl", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("state")).toBe("st");
     expect(url.searchParams.get("id_token_add_organizations")).toBe("true");
+    expect(url.searchParams.get("originator")).toBe("codex_cli_rs");
+    expect(url.searchParams.get("scope")).toBe(
+      "openid profile email offline_access api.connectors.read api.connectors.invoke",
+    );
   });
 });
 
@@ -117,6 +121,12 @@ describe("parseTokenResponse", () => {
       expect((error as OAuthError).code).toBe("invalid_grant");
       expect((error as OAuthError).message).toBe("refresh token expired");
     }
+  });
+
+  it("preserves a non-JSON 403 explanation", () => {
+    expect(() =>
+      parseTokenResponse(403, "Access denied by the authorization service."),
+    ).toThrow("Access denied by the authorization service.");
   });
 
   it("rejects a success response with no access token", () => {

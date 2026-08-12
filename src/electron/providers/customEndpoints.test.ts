@@ -147,14 +147,43 @@ describe("CustomEndpointStore", () => {
     expect(s.managedModels()[0]).not.toHaveProperty("reasoningEfforts");
   });
 
-  it("offers effort levels once the endpoint opts in", () => {
+  it("lets verified model metadata override the endpoint fallback", () => {
     const s = store();
-    s.upsert({ ...relay, supportsReasoningEffort: true });
+    s.upsert({
+      ...relay,
+      supportsReasoningEffort: true,
+      models: [
+        {
+          ...relay.models[0],
+          supportsReasoningEffort: true,
+          reasoningEfforts: ["low", "high", "max"],
+          defaultReasoningEffort: "high",
+        },
+        {
+          ...relay.models[1],
+          supportsReasoningEffort: false,
+        },
+        {
+          id: "relay-unknown",
+          label: "Relay unknown",
+          contextWindow: 64_000,
+        },
+      ],
+    });
 
-    expect(s.list()[0]!.supportsReasoningEffort).toBe(true);
-    for (const model of s.managedModels()) {
-      expect(model.reasoningEfforts).toEqual(["high", "medium", "low"]);
-    }
+    const saved = s.list()[0]!;
+    expect(saved.models[0]).toMatchObject({
+      supportsReasoningEffort: true,
+      reasoningEfforts: ["low", "high", "max"],
+      defaultReasoningEffort: "high",
+    });
+    expect(saved.models[1]!.supportsReasoningEffort).toBe(false);
+
+    const models = s.managedModels();
+    expect(models[0]!.reasoningEfforts).toEqual(["low", "high", "max"]);
+    expect(models[0]!.defaultReasoningEffort).toBe("high");
+    expect(models[1]).not.toHaveProperty("reasoningEfforts");
+    expect(models[2]!.reasoningEfforts).toEqual(["high", "medium", "low"]);
   });
 
   it("can turn reasoning effort back off", () => {

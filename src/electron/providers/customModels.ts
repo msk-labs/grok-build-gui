@@ -33,11 +33,13 @@ export type ManagedModel = {
   contextWindow: number;
   maxCompletionTokens?: number;
   /**
-   * Advertise reasoning-effort support, which makes the agent send a
-   * `reasoning_effort` field. Off unless the user opts in: a provider that
-   * rejects unknown fields would fail every request.
+   * Advertise reasoning-effort support, which makes the agent send the
+   * backend-appropriate effort field. Verified model metadata takes priority;
+   * unknown relay models can still use the endpoint's manual fallback.
    */
   reasoningEfforts?: readonly string[];
+  /** Effort marked as default in the agent model menu. */
+  defaultReasoningEffort?: string;
 };
 
 const CONTROL_ESCAPES: Record<string, string> = {
@@ -60,9 +62,10 @@ export function tomlString(value: string): string {
       continue;
     }
     const code = char.codePointAt(0)!;
-    out += code < 0x20 || code === 0x7f
-      ? `\\u${code.toString(16).padStart(4, "0")}`
-      : char;
+    out +=
+      code < 0x20 || code === 0x7f
+        ? `\\u${code.toString(16).padStart(4, "0")}`
+        : char;
   }
   return `${out}"`;
 }
@@ -91,10 +94,13 @@ export function renderManagedBlock(models: ManagedModel[]): string {
       `context_window = ${model.contextWindow}`,
     );
     if (model.reasoningEfforts?.length) {
+      const defaultEffort = model.defaultReasoningEffort;
       const entries = model.reasoningEfforts.map(
         (effort, index) =>
           `{ id = ${tomlString(effort)}, value = ${tomlString(effort)}, ` +
-          `label = ${tomlString(effortLabel(effort))}, default = ${index === 0} }`,
+          `label = ${tomlString(effortLabel(effort))}, default = ${
+            defaultEffort ? effort === defaultEffort : index === 0
+          } }`,
       );
       lines.push(
         "supports_reasoning_effort = true",

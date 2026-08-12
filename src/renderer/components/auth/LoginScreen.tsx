@@ -1,12 +1,17 @@
 import "./LoginScreen.css";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import appIcon from "../../../../resources/icon.png";
+
+// Vitest currently compiles standalone TSX tests with the classic JSX runtime.
+void React;
 
 type Props = {
   loading: boolean;
   signingIn: boolean;
   error: string | null;
   onLogin: () => void;
+  onSkip: () => void;
   onCancel: () => void;
 };
 
@@ -15,6 +20,7 @@ export function LoginScreen({
   signingIn,
   error,
   onLogin,
+  onSkip,
   onCancel,
 }: Props) {
   const { t } = useTranslation();
@@ -65,9 +71,19 @@ export function LoginScreen({
             <button type="button" className="auth-cancel" onClick={onCancel}>
               {t("common.cancel")}
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              className="auth-skip"
+              onClick={onSkip}
+              disabled={loading}
+            >
+              {t("auth.skipSignIn")}
+            </button>
+          )}
         </div>
 
+        <p className="auth-guest-hint">{t("auth.guestHint")}</p>
         <p className="auth-privacy">
           {t("auth.privacy")}
         </p>

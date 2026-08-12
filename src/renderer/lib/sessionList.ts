@@ -166,11 +166,13 @@ export function mergeLoadedSession(
     sessionId: string;
     cwd: string;
     isNew: boolean;
+    /** Exact provisional row correlated by the session/new caller. */
+    provisionalId?: string;
     isSideTask?: boolean;
     worktree?: SessionWorktree;
   },
 ): LocalSession[] {
-  const { sessionId, cwd, isNew, isSideTask, worktree } = event;
+  const { sessionId, cwd, isNew, provisionalId, isSideTask, worktree } = event;
   const exists = prev.some((s) => s.id === sessionId);
   if (exists) {
     return prev.map((s) =>
@@ -187,21 +189,11 @@ export function mergeLoadedSession(
     );
   }
 
-  // First-send optimistic row uses a local: id until session/new returns.
-  // Promote that row instead of inserting a second empty "Untitled" entry.
-  if (isNew) {
-    let provisional: LocalSession | undefined;
-    for (const s of prev) {
-      if (!isProvisionalSessionId(s.id)) continue;
-      if (
-        !provisional ||
-        (s.updatedAt ?? s.createdAt) > (provisional.updatedAt ?? provisional.createdAt)
-      ) {
-        provisional = s;
-      }
-    }
-    if (provisional) {
-      return adoptProvisionalSession(prev, provisional.id, sessionId, cwd).map(
+  // Promote only the provisional row that initiated this session/new. Guessing
+  // the newest local row cross-wired concurrent normal/side-task creations.
+  if (isNew && provisionalId && isProvisionalSessionId(provisionalId)) {
+    if (prev.some((s) => s.id === provisionalId)) {
+      return adoptProvisionalSession(prev, provisionalId, sessionId, cwd).map(
         (s) =>
           s.id === sessionId
             ? {

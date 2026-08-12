@@ -1,34 +1,33 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { ModelState, PermissionMode } from "../../../electron/preload";
 import { groupModels } from "../../lib/modelGroups";
 import { ModelIcon } from "../ModelIcon";
+import { modelPickerMeta, type ModelPickerTag } from "./modelPickerMeta";
 import {
   CaptureIcon,
+  CheckIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
+  EditModelIcon,
   PaperclipIcon,
   PlusIcon,
   ShieldIcon,
 } from "./icons";
 import {
   PERMISSION_OPTIONS,
-  cleanEffortLabel,
   effortOptionsForModel,
   modelChipLabel,
 } from "./permissionOptions";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
-export type ComposerMenu =
-  | "permission"
-  | "model"
-  | "attach"
-  | "context"
-  | null;
+export type ComposerMenu = "permission" | "model" | "attach" | "context" | null;
 
 type Common = {
   menu: ComposerMenu;
@@ -187,9 +186,7 @@ export function PermissionMenu({
               }}
             >
               <span className="composer-menu-item-label">{opt.label}</span>
-              <span className="composer-menu-item-desc">
-                {opt.description}
-              </span>
+              <span className="composer-menu-item-desc">{opt.description}</span>
             </button>
           ))}
         </div>
@@ -198,9 +195,16 @@ export function PermissionMenu({
   );
 }
 
-/** Which flyout is open beside a root menu row (click to expand). */
-/** Models render inline; only reasoning effort still nests. */
-type ModelSubmenu = "intensity" | null;
+type HoveredModel = {
+  modelId: string;
+  top: number;
+};
+
+function modelTagLabel(tag: ModelPickerTag, t: TFunction) {
+  return tag === "accelerated"
+    ? t("composer.modelAccelerated")
+    : t("composer.modelFree");
+}
 
 export function ModelMenu({
   menu,
@@ -209,16 +213,24 @@ export function ModelMenu({
   disabled,
   models,
   onModelChange,
+  onConfigureModels,
 }: Common & {
   models: ModelState;
   /** modelId + optional reasoning effort (high | medium | low | …). */
   onModelChange: (modelId: string, reasoningEffort?: string | null) => void;
+  onConfigureModels?: () => void;
 }) {
   const { t } = useTranslation();
-  const [openSub, setOpenSub] = useState<ModelSubmenu>(null);
+  const [hoveredModel, setHoveredModel] = useState<HoveredModel | null>(null);
+  const [detailTop, setDetailTop] = useState(4);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (menu !== "model") setOpenSub(null);
+    if (menu !== "model") {
+      setHoveredModel(null);
+      setDetailTop(4);
+    }
   }, [menu]);
 
   const currentModel = models.availableModels.find(
@@ -232,9 +244,13 @@ export function ModelMenu({
   )?.label;
   const localizeEffort = (value?: string | null) => {
     const normalized = value?.trim().toLowerCase();
-    if (normalized === "high") return t("composer.effortHigh");
-    if (normalized === "medium") return t("composer.effortMedium");
+    if (normalized === "none") return t("composer.effortNone");
+    if (normalized === "minimal") return t("composer.effortMinimal");
     if (normalized === "low") return t("composer.effortLow");
+    if (normalized === "medium") return t("composer.effortMedium");
+    if (normalized === "high") return t("composer.effortHigh");
+    if (normalized === "xhigh") return t("composer.effortXHigh");
+    if (normalized === "max") return t("composer.effortMax");
     return value || "";
   };
   const intensityLabel = localizeEffort(rawIntensityLabel || currentEffort);
@@ -245,14 +261,45 @@ export function ModelMenu({
     intensityLabel,
   );
   const modelOptions = models.availableModels;
-  const modelGroups = useMemo(() => groupModels(modelOptions), [modelOptions]);
-  const intensityValue =
-    intensityLabel ||
-    (currentEffort ? cleanEffortLabel(currentEffort) : "—");
+  const autoModel = modelOptions.find((m) => {
+    const key = `${m.modelId} ${m.name}`.toLowerCase();
+    return key === "auto" || key.startsWith("auto ") || m.modelId === "auto";
+  });
+  const selectableModels = autoModel
+    ? modelOptions.filter((m) => m.modelId !== autoModel.modelId)
+    : modelOptions;
+  const modelGroups = useMemo(
+    () => groupModels(selectableModels),
+    [selectableModels],
+  );
+  const detailModel = hoveredModel
+    ? modelOptions.find((m) => m.modelId === hoveredModel.modelId)
+    : null;
+  const detailMeta = detailModel ? modelPickerMeta(detailModel) : null;
 
-  function toggleSub(which: NonNullable<ModelSubmenu>) {
-    setOpenSub((cur) => (cur === which ? null : which));
-  }
+  useLayoutEffect(() => {
+    const root = menuRef.current;
+    const detail = detailRef.current;
+    if (!root || !detail || !hoveredModel || !detailModel) return;
+
+    const rootRect = root.getBoundingClientRect();
+    const detailRect = detail.getBoundingClientRect();
+    const viewportPadding = 8;
+    const desiredTop = rootRect.top + hoveredModel.top;
+    const minTop = viewportPadding;
+    const maxTop = Math.max(
+      minTop,
+      window.innerHeight - viewportPadding - detailRect.height,
+    );
+    const clampedTop = Math.min(Math.max(desiredTop, minTop), maxTop);
+    // The flyout may need to rise above the root menu when the composer is
+    // close to the bottom edge. The root panel allows visible overflow.
+    const nextTop = clampedTop - rootRect.top;
+
+    if (Math.abs(nextTop - detailTop) > 0.5) {
+      setDetailTop(nextTop);
+    }
+  }, [detailModel, detailTop, hoveredModel]);
 
   function selectModel(modelId: string) {
     const m = modelOptions.find((x) => x.modelId === modelId);
@@ -261,9 +308,7 @@ export function ModelMenu({
       const opts = effortOptionsForModel(m);
       const nextEffort =
         (currentEffort &&
-        opts.some(
-          (o) => o.value === currentEffort || o.id === currentEffort,
-        )
+        opts.some((o) => o.value === currentEffort || o.id === currentEffort)
           ? currentEffort
           : null) ??
         m.defaultReasoningEffort ??
@@ -277,10 +322,22 @@ export function ModelMenu({
     closeMenu();
   }
 
-  function selectIntensity(value: string) {
-    if (!models.currentModelId) return;
-    onModelChange(models.currentModelId, value);
+  function selectModelIntensity(modelId: string, value: string) {
+    onModelChange(modelId, value);
     closeMenu();
+  }
+
+  function hoverModel(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    modelId: string,
+  ) {
+    const root = menuRef.current;
+    if (!root) return;
+    const row = event.currentTarget.getBoundingClientRect();
+    const panel = root.getBoundingClientRect();
+    const top = row.top - panel.top;
+    setDetailTop(Math.max(4, top));
+    setHoveredModel({ modelId, top });
   }
 
   return (
@@ -305,96 +362,153 @@ export function ModelMenu({
         <ChevronDownIcon />
       </button>
       {menu === "model" && modelOptions.length > 0 ? (
-        <div className="composer-menu composer-menu-model" role="menu">
-          {/* Models sit at the top level: switching them is why this menu opens. */}
+        <div
+          ref={menuRef}
+          className="composer-menu composer-menu-model"
+          role="menu"
+          onMouseLeave={() => setHoveredModel(null)}
+        >
           <div className="composer-menu-model-list">
-                {modelGroups.map((group, groupIndex) => (
-                  <div key={group.id} role="group" aria-label={t(group.labelKey)}>
-                    {/* A single group needs no heading — it is the whole list. */}
-                    {modelGroups.length > 1 ? (
-                      <>
-                        {groupIndex > 0 ? (
-                          <div className="composer-menu-divider" />
-                        ) : null}
-                        <div className="composer-menu-title">
-                          {t(group.labelKey)}
-                        </div>
-                      </>
-                    ) : null}
-                    {group.models.map((m) => {
-                      const selected = m.modelId === models.currentModelId;
-                      return (
-                        <button
-                          key={m.modelId}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={selected}
-                          className={`composer-menu-item${
-                            selected ? " active" : ""
-                          }`}
-                          onClick={() => selectModel(m.modelId)}
-                        >
-                          <span className="composer-menu-item-label model-option">
-                            <ModelIcon modelId={m.modelId} name={m.name} />
-                            {m.name || m.modelId}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-          </div>
-
-          {showIntensity && models.currentModelId ? (
-            <div
-              className={`composer-menu-submenu-wrap${
-                openSub === "intensity" ? " open" : ""
-              }`}
-            >
-              <div className="composer-menu-divider" />
+            {autoModel ? (
               <button
                 type="button"
-                role="menuitem"
-                className={`composer-menu-item${
-                  openSub === "intensity" ? " open" : ""
+                role="menuitemradio"
+                aria-checked={autoModel.modelId === models.currentModelId}
+                className={`composer-menu-item composer-model-row${
+                  autoModel.modelId === models.currentModelId ? " active" : ""
                 }`}
-                aria-haspopup="menu"
-                aria-expanded={openSub === "intensity"}
-                onClick={() => toggleSub("intensity")}
+                onClick={() => selectModel(autoModel.modelId)}
+                onMouseEnter={(event) => hoverModel(event, autoModel.modelId)}
               >
-                <span className="composer-menu-item-row">
-                  <span className="composer-menu-item-label">
-                    {t("composer.reasoningIntensity")}
-                  </span>
-                  <span className="composer-menu-item-value">
-                    {intensityValue}
-                    <ChevronRightIcon />
-                  </span>
+                <span className="composer-menu-item-label model-option">
+                  <ModelIcon
+                    modelId={autoModel.modelId}
+                    name={autoModel.name}
+                  />
+                  {autoModel.name || t("composer.autoModel")}
                 </span>
+                {autoModel.modelId === models.currentModelId ? (
+                  <CheckIcon />
+                ) : null}
               </button>
-              {openSub === "intensity" ? (
-                <div
-                  className="composer-menu composer-menu-submenu"
-                  role="menu"
-                >
-                  {intensityOptions.map((opt) => {
+            ) : null}
+            {modelGroups.map((group, groupIndex) => (
+              <div key={group.id} role="group" aria-label={t(group.labelKey)}>
+                {modelGroups.length > 1 ? (
+                  <>
+                    {groupIndex > 0 ? (
+                      <div className="composer-menu-divider" />
+                    ) : null}
+                    <div className="composer-menu-title">
+                      {t(group.labelKey)}
+                    </div>
+                  </>
+                ) : null}
+                {group.models.map((m) => {
+                  const selected = m.modelId === models.currentModelId;
+                  const meta = modelPickerMeta(m);
+                  return (
+                    <button
+                      key={m.modelId}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      className={`composer-menu-item composer-model-row${
+                        selected ? " active" : ""
+                      }`}
+                      onClick={() => selectModel(m.modelId)}
+                      onMouseEnter={(event) => hoverModel(event, m.modelId)}
+                    >
+                      <span className="composer-menu-item-label model-option">
+                        <ModelIcon modelId={m.modelId} name={m.name} />
+                        <span className="composer-model-name">
+                          {m.name || m.modelId}
+                        </span>
+                        {meta.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className={`composer-model-tag composer-model-tag-${tag}`}
+                          >
+                            {modelTagLabel(tag, t)}
+                          </span>
+                        ))}
+                      </span>
+                      {meta.rate ? (
+                        <span className="composer-model-rate">{meta.rate}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          <div className="composer-menu-divider" />
+          <button
+            type="button"
+            role="menuitem"
+            className="composer-menu-item composer-model-configure"
+            onClick={() => {
+              closeMenu();
+              onConfigureModels?.();
+            }}
+          >
+            <EditModelIcon />
+            <span>{t("composer.configureCustomModel")}</span>
+          </button>
+
+          {detailModel && detailMeta ? (
+            <div
+              ref={detailRef}
+              className="composer-model-detail"
+              style={{ top: detailTop }}
+              role="menu"
+              aria-label={`${detailModel.name || detailModel.modelId} ${t(
+                "composer.reasoningIntensity",
+              )}`}
+            >
+              <strong>{detailModel.name || detailModel.modelId}</strong>
+              <p>
+                {detailMeta.descriptionKey
+                  ? t(detailMeta.descriptionKey)
+                  : t("composer.modelDefaultDescription")}
+              </p>
+              {detailMeta.rate ? (
+                <div className="composer-model-detail-rate">
+                  <span>{t("composer.consumptionSpeed")}</span>
+                  <span>
+                    {detailMeta.rate} {t("composer.rateSuffix")}
+                  </span>
+                </div>
+              ) : null}
+              {effortOptionsForModel(detailModel).length > 0 ? (
+                <div className="composer-model-detail-intensity">
+                  <div className="composer-model-detail-title">
+                    {t("composer.reasoningIntensity")}
+                  </div>
+                  {effortOptionsForModel(detailModel).map((option) => {
                     const selected =
-                      opt.value === currentEffort ||
-                      opt.id === currentEffort;
+                      detailModel.modelId === models.currentModelId &&
+                      (option.value === currentEffort ||
+                        option.id === currentEffort);
                     return (
                       <button
-                        key={opt.id}
+                        key={option.id}
                         type="button"
                         role="menuitemradio"
                         aria-checked={selected}
-                        className={`composer-menu-item${
+                        className={`composer-model-intensity-option${
                           selected ? " active" : ""
                         }`}
-                        onClick={() => selectIntensity(opt.value)}
+                        onClick={() =>
+                          selectModelIntensity(
+                            detailModel.modelId,
+                            option.value,
+                          )
+                        }
                       >
-                        <span className="composer-menu-item-label">
-                          {localizeEffort(opt.label)}
-                        </span>
+                        <span>{localizeEffort(option.label)}</span>
+                        {selected ? <CheckIcon /> : null}
                       </button>
                     );
                   })}

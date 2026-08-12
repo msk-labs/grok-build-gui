@@ -145,7 +145,8 @@ html[data-platform="win32"] .auth-screen {
 }
 
 .auth-primary,
-.auth-cancel {
+.auth-cancel,
+.auth-skip {
   width: min(320px, 100%);
   min-height: 44px;
   border-radius: 10px;
@@ -175,9 +176,29 @@ html[data-platform="win32"] .auth-screen {
   border: 1px solid var(--border);
 }
 
-.auth-cancel:hover {
+.auth-skip {
+  color: var(--text);
+  background: transparent;
+  border: none;
+}
+
+.auth-cancel:hover,
+.auth-skip:hover:not(:disabled) {
   color: var(--text);
   background: var(--bg-hover);
+}
+
+.auth-skip:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.auth-guest-hint {
+  margin: -12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .auth-privacy {

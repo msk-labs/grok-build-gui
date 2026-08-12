@@ -13,26 +13,50 @@ export type ChatGptModel = {
   label: string;
   contextWindow: number;
   maxOutputTokens: number;
+  reasoningEfforts: readonly string[];
+  defaultReasoningEffort: string;
 };
 
 export const CHATGPT_MODELS: ChatGptModel[] = [
   {
-    id: "gpt-5.3-codex",
-    label: "GPT-5.3 Codex (ChatGPT)",
+    id: "gpt-5.6-sol",
+    label: "5.6 Sol",
     contextWindow: 272_000,
     maxOutputTokens: 128_000,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
   },
   {
-    id: "gpt-5.3-codex-mini",
-    label: "GPT-5.3 Codex mini (ChatGPT)",
+    id: "gpt-5.6-terra",
+    label: "5.6 Terra",
     contextWindow: 272_000,
     maxOutputTokens: 128_000,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
   },
   {
-    id: "gpt-5.2-codex",
-    label: "GPT-5.2 Codex (ChatGPT)",
+    id: "gpt-5.6-luna",
+    label: "5.6 Luna",
     contextWindow: 272_000,
     maxOutputTokens: 128_000,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
+  },
+  {
+    id: "gpt-5.5",
+    label: "5.5",
+    contextWindow: 272_000,
+    maxOutputTokens: 128_000,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
+  },
+  {
+    id: "gpt-5.2",
+    label: "5.2",
+    contextWindow: 272_000,
+    maxOutputTokens: 128_000,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
   },
 ];
 

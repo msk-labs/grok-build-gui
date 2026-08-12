@@ -24,8 +24,19 @@ import {
   readReasoningEffortPreference,
   writeReasoningEffortPreference,
 } from "./reasoningPreference.js";
-import { GROK_AGENT_STDIO_ARGS } from "./agentProcess.js";
+import {
+  grokAgentStdioArgs,
+  type GrokSandboxProfile,
+} from "./agentProcess.js";
 import { modelResyncArgs } from "./modelResync.js";
+import {
+  PermissionProfileStore,
+  profileForMode,
+  type PermissionMode,
+  type PermissionProfile,
+} from "./permissionProfiles.js";
+
+export type { PermissionMode, PermissionProfile } from "./permissionProfiles.js";
 
 /** Grok extension methods use a leading `_` on the wire (ACP convention). */
 const XAI_SESSION_LIST = "_x.ai/session/list";
@@ -62,8 +73,19 @@ const XAI_SESSION_RENAME_METHODS = [
   "_x.ai/session/rename",
   "x.ai/session/rename",
 ] as const;
+const SESSION_TITLE_PLACEHOLDERS = new Set([
+  "untitled session",
+  "new chat",
+  "session",
+  "new session",
+]);
 const HISTORY_PREVIEW_INTERVAL_MS = 120;
 const HISTORY_PREVIEW_LIMIT = 4;
+/** Existing CLI sessions predate the GUI registry; preserve Grok's old default. */
+const LEGACY_PERMISSION_PROFILE: PermissionProfile = {
+  sandbox: "off",
+  approval: "auto",
+};
 
 /**
  * Side-task sessions are temporary even though the agent persists every ACP
@@ -230,9 +252,6 @@ export type AgentSessionSearchResult = {
   totalEstimate?: number;
 };
 
-/** Grok permission modes (maps to Codex-style approval chips). */
-export type PermissionMode = "ask" | "auto" | "always-approve";
-
 /** Client-supplied stdio MCP (e.g. the GUI's built-in browser tools). */
 export type ClientMcpStdio = {
   name: string;
@@ -355,7 +374,9 @@ function cleanEffortLabel(value: string, label?: string | null): string {
     .toLowerCase()
     .replace(/[\s_-]*effort$/i, "")
     .trim();
-  if (key === "high" || key === "medium" || key === "low") return key;
+  if (key === "high" || key === "medium" || key === "low" || key === "max") {
+    return key;
+  }
   const raw = (label && label.trim()) || value;
   const stripped = raw
     .replace(/\beffort\b/gi, "")
@@ -409,6 +430,7 @@ export type ConnectionState =
       loadingHistory?: boolean;
       models?: ModelState;
       permissionMode?: PermissionMode;
+      sandboxProfile?: GrokSandboxProfile;
     }
   | { status: "error"; message: string };
 
@@ -416,8 +438,8 @@ export type ConnectionState =
 export type ConnectResult = ConnectionState & {
   sessions?: AgentSessionSummary[];
   /**
-   * Live turns after connect: local map + reattached leader turns
-   * (persisted across Electron restarts when using `--leader`).
+   * Live turns owned by this app process. Sandboxed runtimes intentionally do
+   * not use Grok's shared leader because a sandbox is process-scoped.
    */
   runningSessionIds?: string[];
 };
@@ -449,7 +471,17 @@ export type PermissionRequestPayload = {
 };
 
 type PendingPermission = {
+  sessionId?: string;
   resolve: (response: acp.RequestPermissionResponse) => void;
+};
+
+type AgentRuntime = {
+  id: string;
+  child: ChildProcessWithoutNullStreams;
+  connection: acp.ClientConnection;
+  cwd: string;
+  profile: PermissionProfile;
+  sessionId: string | null;
 };
 
 const BUILTIN_BROWSER_MCP_TOOLS = new Set([
@@ -574,8 +606,8 @@ type SearchResponse = {
 
 /** One in-flight `session/load`, including the replay fold it collects. */
 type HistoryLoad = {
-  /** `connectGen` when the load started — a reconnect invalidates it. */
-  gen: number;
+  /** Runtime assigned before `session/load`; isolates concurrent replays. */
+  runtimeId: string | null;
   accumulator: HistoryMessageAccumulator;
   startedAt: number;
   firstUpdateAt: number | null;
@@ -585,22 +617,26 @@ type HistoryLoad = {
 };
 
 /**
- * Owns the GUI's ACP **client** (`grok agent --leader stdio`).
+ * Owns isolated ACP runtimes (`grok --sandbox <profile> agent stdio`).
  *
- * Work runs in the shared **leader** process (`~/.grok/leader.sock`), which
- * outlives Electron restarts (`--no-exit-on-disconnect`). Killing this class's
- * child only drops the thin stdio client — not in-flight turns on the leader.
- * Session history lives in `~/.grok/sessions` (same as the CLI).
+ * Each loaded GUI session gets one process so its cwd, sandbox, and approval
+ * mode cannot affect another chat. Session history remains in
+ * `~/.grok/sessions` and is compatible with the CLI.
  */
 export class SessionManager {
   private win: BrowserWindow | null = null;
-  /** Thin ACP client process — NOT the leader backend. */
-  private child: ChildProcessWithoutNullStreams | null = null;
   private connection: acp.ClientConnection | null = null;
+  /** Every live ACP process. Session runtimes are intentionally one-to-one. */
+  private runtimes = new Map<string, AgentRuntime>();
+  private sessionRuntimeIds = new Map<string, string>();
+  private activeRuntimeId: string | null = null;
+  private closingRuntimeIds = new Set<string>();
   private activeSessionId: string | null = null;
   private activeCwd = "";
   /** In-flight turns keyed by sessionId — multiple sessions may run at once. */
   private runningTurns = new Map<string, AbortController>();
+  /** Suppress late load/update events once deletion has started for a session. */
+  private deletedSessionIds = new Set<string>();
   /**
    * Workspace root and start time per in-flight turn, captured at prompt time.
    * Recorded up front because a background turn may finish long after the user
@@ -618,8 +654,12 @@ export class SessionManager {
   /** Preferred / session reasoning effort (e.g. high | medium | low). */
   private reasoningEffort: string | undefined = this.preferredReasoningEffort;
   private availableModels: ModelInfo[] = [];
-  /** Local + agent permission mode (Codex-style approval chip). New chats default to Auto. */
-  private permissionMode: PermissionMode = "auto";
+  private readonly permissionProfiles = new PermissionProfileStore();
+  /** Focused session/draft approval chip. The durable source is permissionProfiles. */
+  private permissionMode: PermissionMode =
+    this.permissionProfiles.getDefault().approval;
+  private sandboxProfile: GrokSandboxProfile =
+    this.permissionProfiles.getDefault().sandbox;
   /**
    * MCP servers the GUI injects on session/new + session/load
    * (the built-in browser MCP is available for every GUI session).
@@ -637,7 +677,7 @@ export class SessionManager {
   private modelSyncs = new Map<string, Promise<void>>();
   /** Serialize connect/disconnect so React StrictMode double-mount cannot race. */
   private connectChain: Promise<unknown> = Promise.resolve();
-  private connectGen = 0;
+  private runtimePreparation: Promise<void> | null = null;
   private sideTaskSessionIds = new Set(readPersistedSideTaskIds());
   /** ACP-published commands are session-scoped agent truth. */
   private availableCommandsBySession = new Map<string, SlashCommand[]>();
@@ -935,6 +975,7 @@ export class SessionManager {
       loadingHistory: partial.loadingHistory ?? this.isFocusedHistoryLoading(),
       models: this.modelState(),
       permissionMode: this.permissionMode,
+      sandboxProfile: this.sandboxProfile,
     };
   }
 
@@ -944,192 +985,240 @@ export class SessionManager {
     }
   }
 
+  private prepareRuntime(): Promise<void> {
+    if (!this.runtimePreparation) {
+      const preparation = syncManagedModelConfig()
+        .catch((error) => {
+          this.send("agent:log", {
+            level: "stderr",
+            text: `Could not prepare managed models: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        })
+        .finally(() => {
+          // This is a single-flight guard, not a lifetime cache. The ChatGPT
+          // relay is intentionally stopped when the last macOS window closes;
+          // the next runtime must restart it and rewrite its ephemeral port.
+          if (this.runtimePreparation === preparation) {
+            this.runtimePreparation = null;
+          }
+        });
+      this.runtimePreparation = preparation;
+    }
+    return this.runtimePreparation;
+  }
+
+  private async startRuntime(
+    cwd: string,
+    profile: PermissionProfile,
+  ): Promise<{ runtime: AgentRuntime; protocolVersion: number }> {
+    const probe = findGrok();
+    if (!probe) {
+      throw new Error(
+        "The bundled Grok Build artifact is missing or invalid. Run `npm run artifact:grok-build`, then reconnect.",
+      );
+    }
+    this.grokPath = probe.path;
+    this.version = probe.version;
+    await this.prepareRuntime();
+
+    const env = await buildSystemProxyEnvironment(process.env, {
+      GROK_DISABLE_AUTOUPDATER: "1",
+      ...managedModelEnvironment(),
+    });
+    const runtimeId = randomUUID();
+    const child = spawn(probe.path, grokAgentStdioArgs(profile.sandbox), {
+      stdio: ["pipe", "pipe", "pipe"],
+      env,
+      cwd,
+    });
+    child.stderr.on("data", (buf: Buffer) => {
+      const text = buf.toString("utf8").trim();
+      if (text) this.send("agent:log", { level: "stderr", text });
+    });
+
+    const input = Writable.toWeb(child.stdin);
+    const output = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
+    const stream = acp.ndJsonStream(input, output);
+    const connection = await acp
+      .client({ name: "grok-gui" })
+      .onRequest(acp.methods.client.session.requestPermission, async (ctx) =>
+        this.handlePermission(ctx.params, profile),
+      )
+      .onRequest(acp.methods.client.fs.readTextFile, async () => ({ content: "" }))
+      .onRequest(acp.methods.client.fs.writeTextFile, async () => ({}))
+      .onNotification(acp.methods.client.session.update, (ctx) => {
+        this.handleSessionUpdate(ctx.params);
+      })
+      .onNotification(
+        XAI_WORKTREE_STATUS,
+        (params) => params as WorktreeStatusEvent,
+        (ctx) => this.handleWorktreeStatus(ctx.params),
+      )
+      .connect(stream);
+
+    const runtime: AgentRuntime = {
+      id: runtimeId,
+      child,
+      connection,
+      cwd,
+      profile: { ...profile },
+      sessionId: null,
+    };
+    this.runtimes.set(runtimeId, runtime);
+    child.on("exit", (code, signal) => {
+      this.handleRuntimeExit(runtimeId, code, signal);
+    });
+
+    try {
+      const initResult = (await connection.agent.request(
+        acp.methods.agent.initialize,
+        {
+          protocolVersion: acp.PROTOCOL_VERSION,
+          clientCapabilities: {
+            fs: { readTextFile: false, writeTextFile: false },
+            terminal: false,
+          },
+          clientInfo: { name: "grok-gui", version: "0.1.0" },
+        },
+      )) as { protocolVersion: number; _meta?: { modelState?: unknown } };
+      this.applyModelState(initResult._meta?.modelState);
+      this.emitModels();
+      return { runtime, protocolVersion: initResult.protocolVersion };
+    } catch (error) {
+      await this.closeRuntime(runtimeId);
+      throw error;
+    }
+  }
+
+  private activateRuntime(runtime: AgentRuntime, sessionId = runtime.sessionId) {
+    this.activeRuntimeId = runtime.id;
+    this.connection = runtime.connection;
+    this.activeSessionId = sessionId;
+    this.activeCwd = runtime.cwd;
+    this.permissionMode = runtime.profile.approval;
+    this.sandboxProfile = runtime.profile.sandbox;
+  }
+
+  private runtimeForSession(sessionId: string): AgentRuntime | null {
+    const runtimeId = this.sessionRuntimeIds.get(sessionId);
+    return runtimeId ? (this.runtimes.get(runtimeId) ?? null) : null;
+  }
+
+  private handleRuntimeExit(
+    runtimeId: string,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ) {
+    const wasClosing = this.closingRuntimeIds.delete(runtimeId);
+    const runtime = this.runtimes.get(runtimeId);
+    if (!runtime) return;
+    this.runtimes.delete(runtimeId);
+    if (runtime.sessionId) {
+      this.sessionRuntimeIds.delete(runtime.sessionId);
+      for (const [requestId, pending] of this.pendingPermissions) {
+        if (pending.sessionId !== runtime.sessionId) continue;
+        this.pendingPermissions.delete(requestId);
+        pending.resolve({ outcome: { outcome: "cancelled" } });
+        this.send("agent:permission-timeout", { requestId });
+      }
+      const abort = this.runningTurns.get(runtime.sessionId);
+      if (abort) {
+        abort.abort();
+        this.runningTurns.delete(runtime.sessionId);
+        this.send("agent:turn", {
+          status: "stopped",
+          sessionId: runtime.sessionId,
+          stopReason: "disconnected",
+        });
+      }
+    }
+    if (wasClosing) return;
+    if (this.activeRuntimeId === runtimeId) {
+      this.connection = null;
+      this.activeRuntimeId = null;
+      this.activeSessionId = null;
+      this.setState({
+        status: "error",
+        message: `grok agent exited (code=${code ?? "?"}, signal=${signal ?? "none"})`,
+      });
+    }
+  }
+
+  private async closeRuntime(runtimeId: string): Promise<void> {
+    const runtime = this.runtimes.get(runtimeId);
+    if (!runtime) return;
+    this.closingRuntimeIds.add(runtimeId);
+    try {
+      runtime.connection.close();
+    } catch {
+      // ignore
+    }
+    if (!runtime.child.killed) runtime.child.kill();
+    this.runtimes.delete(runtimeId);
+    if (runtime.sessionId) this.sessionRuntimeIds.delete(runtime.sessionId);
+    if (this.activeRuntimeId === runtimeId) {
+      this.activeRuntimeId = null;
+      this.connection = null;
+    }
+  }
+
   async connect(cwd: string): Promise<ConnectResult> {
     const run = async (): Promise<ConnectResult> => {
-      const gen = ++this.connectGen;
-      await this.disconnectInternal();
-      if (gen !== this.connectGen) {
-        return this.state as ConnectResult;
-      }
-
       this.setState({ status: "connecting" });
       this.activeCwd = cwd;
       this.activeSessionId = null;
-
-      const probe = findGrok();
-      if (!probe) {
-        const err: ConnectResult = {
-          status: "error",
-          message:
-            "The bundled Grok Build artifact is missing or invalid. Run `npm run artifact:grok-build`, then reconnect.",
-          sessions: [],
-        };
-        this.setState(err);
-        return err;
-      }
-
-      this.grokPath = probe.path;
-      this.version = probe.version;
-
-      // Managed models must be registered before the agent starts: it reads its
-      // catalog once, and the relay's port and token are new on every launch.
-      try {
-        await syncManagedModelConfig();
-      } catch (error) {
-        this.send("agent:log", {
-          level: "stderr",
-          text: `Could not prepare managed models: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        });
-      }
+      const profile = this.permissionProfiles.getDefault();
 
       try {
-        const env = await buildSystemProxyEnvironment(process.env, {
-          GROK_DISABLE_AUTOUPDATER: "1",
-          // Endpoint API keys travel here, never through config.toml.
-          ...managedModelEnvironment(),
-        });
-        const child = spawn(probe.path, [...GROK_AGENT_STDIO_ARGS], {
-          stdio: ["pipe", "pipe", "pipe"],
-          env,
-        });
-        this.child = child;
-
-        child.stderr.on("data", (buf: Buffer) => {
-          const text = buf.toString("utf8").trim();
-          if (text) this.send("agent:log", { level: "stderr", text });
-        });
-
-        child.on("exit", (code, signal) => {
-          if (this.state.status === "ready" || this.state.status === "connecting") {
-            this.setState({
-              status: "error",
-              message: `grok agent exited (code=${code ?? "?"}, signal=${signal ?? "none"})`,
-            });
-          }
-          this.cleanupProcessOnly();
-        });
-
-        const input = Writable.toWeb(child.stdin);
-        const output = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
-        const stream = acp.ndJsonStream(input, output);
-
-        const self = this;
-        const connection = await acp
-          .client({ name: "grok-gui" })
-          .onRequest(acp.methods.client.session.requestPermission, async (ctx) => {
-            return self.handlePermission(ctx.params);
-          })
-          .onRequest(acp.methods.client.fs.readTextFile, async () => {
-            return { content: "" };
-          })
-          .onRequest(acp.methods.client.fs.writeTextFile, async () => {
-            return {};
-          })
-          .onNotification(acp.methods.client.session.update, (ctx) => {
-            self.handleSessionUpdate(ctx.params);
-          })
-          .onNotification(
-            XAI_WORKTREE_STATUS,
-            (params) => params as WorktreeStatusEvent,
-            (ctx) => {
-              self.handleWorktreeStatus(ctx.params);
-            },
-          )
-          .connect(stream);
-
-        if (gen !== this.connectGen) {
-          try {
-            connection.close();
-          } catch {
-            // ignore
-          }
-          child.kill();
-          return this.state as ConnectResult;
+        // Replace only idle catalog runtimes. Session-bound processes keep
+        // background turns alive while the user changes workspace.
+        for (const runtime of [...this.runtimes.values()]) {
+          if (!runtime.sessionId) await this.closeRuntime(runtime.id);
         }
-
-        this.connection = connection;
-
-        const initResult = await connection.agent.request(
-          acp.methods.agent.initialize,
-          {
-            protocolVersion: acp.PROTOCOL_VERSION,
-            clientCapabilities: {
-              fs: { readTextFile: false, writeTextFile: false },
-              terminal: false,
-            },
-            clientInfo: { name: "grok-gui", version: "0.1.0" },
-          },
-        );
-
-        if (gen !== this.connectGen) {
-          return this.state as ConnectResult;
-        }
-
-        const meta = initResult as {
-          _meta?: { modelState?: unknown };
-        };
-        this.applyModelState(meta._meta?.modelState);
-        this.emitModels();
-
+        const { runtime, protocolVersion } = await this.startRuntime(cwd, profile);
+        this.activateRuntime(runtime, null);
         this.setState(this.readyState({ sessionId: null, cwd }));
         this.send("agent:log", {
           level: "info",
-          text: `Connected protocol v${initResult.protocolVersion}; agent session store ready`,
+          text: `Connected protocol v${protocolVersion}; sandbox=${profile.sandbox}, approvals=${profile.approval}`,
         });
 
-        // Remove temporary sessions left by a crash/forced quit before any
-        // session list is exposed to the renderer.
         if (!this.startupSideTaskCleanupDone) {
           await this.cleanupSideTaskSessions();
           this.startupSideTaskCleanupDone = true;
         }
-
-        // Seed the session→worktree map first so the very first sidebar paint
-        // already knows which chats are isolated (survives an app restart).
         try {
           await this.listWorktrees();
         } catch {
-          // Worktrees are optional context — never block the session list.
+          // Worktrees are optional context.
         }
 
-        // Recent sessions across workspaces (same store as `grok sessions list`).
         let sessions: AgentSessionSummary[] = [];
         try {
           sessions = await this.listSessions(null);
-          // Retry once — agent storage can lag right after cold start.
           if (sessions.length === 0) {
-            await new Promise((r) => setTimeout(r, 250));
+            await new Promise((resolve) => setTimeout(resolve, 250));
             sessions = await this.listSessions(null);
           }
-          this.send("agent:log", {
-            level: "info",
-            text: `Listed ${sessions.length} agent session(s)`,
-          });
           this.emitSessions(sessions, cwd);
-        } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          this.send("agent:log", {
-            level: "warn",
-            text: `session list failed: ${message}`,
-          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
           this.emitSessions([], cwd, message);
         }
-
         const state = this.state;
         const runningSessionIds = this.getRunningSessionIds();
         return state.status === "ready"
           ? { ...state, sessions, runningSessionIds }
           : { ...state, sessions: [], runningSessionIds };
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        await this.disconnectInternal();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         const err: ConnectResult = {
           status: "error",
           message,
           sessions: [],
-          runningSessionIds: [],
+          runningSessionIds: this.getRunningSessionIds(),
         };
         this.setState(err);
         return err;
@@ -1154,6 +1243,7 @@ export class SessionManager {
       };
       _meta?: { isReplay?: boolean; totalTokens?: unknown };
     };
+    if (n.sessionId && this.deletedSessionIds.has(n.sessionId)) return;
     // Runs before the replay/history early-returns below: a resumed session
     // must recover its gauge from the replayed stamps too.
     if (n.sessionId) {
@@ -1294,7 +1384,9 @@ export class SessionManager {
     error?: string,
   ) {
     this.send("agent:sessions", {
-      sessions,
+      sessions: sessions.filter(
+        (session) => !this.deletedSessionIds.has(session.sessionId),
+      ),
       cwd: cwd ?? (this.activeCwd || process.cwd()),
       runningSessionIds: this.getRunningSessionIds(),
       ...(error ? { error } : {}),
@@ -1312,7 +1404,7 @@ export class SessionManager {
     abort.abort();
     // Drop before agent ack — UI truth is "not running" as soon as user stops.
     this.runningTurns.delete(sessionId);
-    void this.connection?.agent
+    void this.runtimeForSession(sessionId)?.connection.agent
       .notify(acp.methods.agent.session.cancel, { sessionId })
       .catch(() => undefined);
     return true;
@@ -1333,6 +1425,8 @@ export class SessionManager {
     if (!this.connection || this.state.status !== "ready") {
       return { ok: false, error: "Not connected" };
     }
+    const runtime = this.runtimeForSession(sessionId);
+    if (runtime) this.activateRuntime(runtime, sessionId);
     this.activeSessionId = sessionId;
     if (typeof cwd === "string" && cwd.length > 0) {
       this.activeCwd = cwd;
@@ -1349,7 +1443,13 @@ export class SessionManager {
 
   private handlePermission(
     params: acp.RequestPermissionRequest,
+    runtimeProfile?: PermissionProfile,
   ): Promise<acp.RequestPermissionResponse> {
+    const sessionId = params.sessionId ? String(params.sessionId) : undefined;
+    const profile = sessionId
+      ? (this.permissionProfiles.getSession(sessionId) ?? runtimeProfile)
+      : runtimeProfile;
+    const mode = profile?.approval ?? this.permissionMode;
     if (
       isComputerUseToolCall(
         params.toolCall?.rawInput,
@@ -1364,7 +1464,7 @@ export class SessionManager {
     // created before the switch never saw `_meta.yoloMode`. Without this the
     // modal still opens in "Full access", which is what users report.
     // Mirrors the early return in requestLocalToolPermission().
-    if (this.permissionMode === "always-approve") {
+    if (mode === "always-approve") {
       const allow = findAllowOption(params.options);
       if (allow) {
         return Promise.resolve({
@@ -1373,7 +1473,7 @@ export class SessionManager {
       }
     }
     if (
-      this.permissionMode === "auto" &&
+      mode === "auto" &&
       isBuiltinBrowserMcpPermission(params)
     ) {
       const allow = findAllowOption(params.options);
@@ -1386,7 +1486,7 @@ export class SessionManager {
     const requestId = `perm-${++this.permissionSeq}`;
     const payload: PermissionRequestPayload = {
       requestId,
-      sessionId: params.sessionId ? String(params.sessionId) : undefined,
+      sessionId,
       toolCall: {
         toolCallId: params.toolCall?.toolCallId ?? undefined,
         title: params.toolCall?.title ?? undefined,
@@ -1401,7 +1501,7 @@ export class SessionManager {
     };
 
     return new Promise((resolve) => {
-      this.pendingPermissions.set(requestId, { resolve });
+      this.pendingPermissions.set(requestId, { sessionId, resolve });
       this.send("agent:permission", payload);
 
       setTimeout(
@@ -1439,7 +1539,10 @@ export class SessionManager {
     kind: string;
     rawInput: unknown;
   }): Promise<boolean> {
-    if (this.permissionMode === "always-approve") return true;
+    const profile = this.activeSessionId
+      ? this.permissionProfiles.getSession(this.activeSessionId)
+      : this.permissionProfiles.getDefault();
+    if (profile?.approval === "always-approve") return true;
     const response = await this.handlePermission({
       sessionId: this.activeSessionId ?? undefined,
       toolCall: {
@@ -1452,7 +1555,7 @@ export class SessionManager {
         { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
         { optionId: "deny_once", name: "Deny", kind: "reject_once" },
       ],
-    } as unknown as acp.RequestPermissionRequest);
+    } as unknown as acp.RequestPermissionRequest, profile ?? undefined);
     const outcome = response.outcome;
     return outcome.outcome === "selected" && outcome.optionId === "allow_once";
   }
@@ -1467,6 +1570,7 @@ export class SessionManager {
   async listSessions(
     cwd?: string | null,
     limit = 80,
+    includeDeleted = false,
   ): Promise<AgentSessionSummary[]> {
     if (!this.connection || this.state.status !== "ready") {
       throw new Error("Not connected");
@@ -1488,7 +1592,7 @@ export class SessionManager {
       raw?.sessions ??
       (Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : []);
 
-    return sessions
+    const normalized = sessions
       .map((s) => normalizeSessionRow(s))
       .filter((s) => s.sessionId.length > 0)
       .map((s) => ({
@@ -1496,6 +1600,9 @@ export class SessionManager {
         isSideTask: this.isSideTaskSession(s.sessionId),
         worktree: this.worktrees.get(s.sessionId),
       }));
+    return includeDeleted
+      ? normalized
+      : normalized.filter((s) => !this.deletedSessionIds.has(s.sessionId));
   }
 
   /**
@@ -1787,67 +1894,20 @@ export class SessionManager {
     if (!sessionId) {
       return { ok: false, error: "Missing session id" };
     }
-    if (!this.connection || this.state.status !== "ready") {
-      return { ok: false, error: "Not connected" };
-    }
+    // Deleting persisted history must not depend on a live ACP process. Guest
+    // mode and failed/cold agent startup can still leave perfectly valid local
+    // sessions in the sidebar, and the documented CLI owns that storage too.
+    const sessionConnection =
+      this.runtimeForSession(sessionId)?.connection ??
+      (this.connection && this.state.status === "ready"
+        ? this.connection
+        : null);
 
-    // Notify before agent-side deletion closes the MCP stdio process; the
-    // native helper needs the live process to release its turn state cleanly.
-    await this.endComputerUseTurn(sessionId, "session-deleted");
+    this.deletedSessionIds.add(sessionId);
 
-    const agentErrors: string[] = [];
-
-    // 1) TUI path — real delete + live-session teardown
-    for (const method of XAI_SESSION_DELETE_METHODS) {
-      try {
-        await this.connection.agent.request(method, { sessionId });
-        break;
-      } catch (e) {
-        agentErrors.push(
-          `${method}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    }
-
-    // 2) Standard ACP (future agents); ignore failures from older builds
-    try {
-      await this.connection.agent.request(acp.methods.agent.session.delete, {
-        sessionId,
-      });
-    } catch (e) {
-      agentErrors.push(
-        `session/delete: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-
-    // Verify postcondition; fall back to CLI if the row is still listed or
-    // the list cannot be queried (empty sessions have bitten older paths).
-    const deletedByAgent = await this.waitForSessionDeletion(sessionId);
-    if (deletedByAgent !== true) {
-      let cliError: string | undefined;
-      try {
-        await this.deleteSessionViaCli(sessionId);
-      } catch (cliErr) {
-        cliError = cliErr instanceof Error ? cliErr.message : String(cliErr);
-      }
-
-      const deletedByCli = await this.waitForSessionDeletion(sessionId);
-      if (deletedByCli !== true) {
-        const details = [
-          agentErrors.length ? `Agent: ${agentErrors.join(" | ")}` : undefined,
-          cliError ? `CLI: ${cliError}` : undefined,
-          deletedByCli === false
-            ? "Session still exists after deletion"
-            : undefined,
-        ].filter((value): value is string => !!value);
-        return {
-          ok: false,
-          error: details.join("; ") || "Could not verify session deletion",
-        };
-      }
-    }
-
-    // Stop only this session's turn; others keep running.
+    // Stop the renderer-owned request before deleting storage. The agent
+    // extension also tears down resident work, but the CLI fallback does not
+    // own this ACP request and could otherwise race a final persistence write.
     const wasRunning = this.isTurnRunning(sessionId);
     this.cancelSessionTurn(sessionId);
     this.runningTurns.delete(sessionId);
@@ -1857,6 +1917,79 @@ export class SessionManager {
         sessionId,
         stopReason: "deleted",
       });
+    }
+
+    const agentErrors: string[] = [];
+
+    // Notify before agent-side deletion closes the MCP stdio process; the
+    // native helper needs the live process to release its turn state cleanly.
+    try {
+      await this.endComputerUseTurn(sessionId, "session-deleted");
+    } catch (e) {
+      agentErrors.push(
+        `computer-use cleanup: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+
+    // 1) TUI path — real delete + live-session teardown, when ACP is live.
+    if (sessionConnection) {
+      for (const method of XAI_SESSION_DELETE_METHODS) {
+        try {
+          await sessionConnection.agent.request(method, { sessionId });
+          break;
+        } catch (e) {
+          agentErrors.push(
+            `${method}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+    }
+
+    // 2) Standard ACP (future agents); ignore failures from older builds.
+    if (sessionConnection) {
+      try {
+        await sessionConnection.agent.request(acp.methods.agent.session.delete, {
+          sessionId,
+        });
+      } catch (e) {
+        agentErrors.push(
+          `session/delete: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
+    // Verify postcondition; fall back to CLI if the row is still listed or
+    // the list cannot be queried (empty sessions have bitten older paths).
+    const deletedByAgent = sessionConnection
+      ? await this.waitForSessionDeletion(sessionId)
+      : null;
+    if (deletedByAgent !== true) {
+      let cliError: string | undefined;
+      try {
+        await this.deleteSessionViaCli(sessionId);
+      } catch (cliErr) {
+        cliError = cliErr instanceof Error ? cliErr.message : String(cliErr);
+      }
+
+      const deletedByCli = sessionConnection
+        ? await this.waitForSessionDeletion(sessionId)
+        : null;
+      // Exit code 0 is authoritative when there is no live agent with which to
+      // query the session index. A positive listing is still a hard failure.
+      if (cliError || deletedByCli === false) {
+        const details = [
+          agentErrors.length ? `Agent: ${agentErrors.join(" | ")}` : undefined,
+          cliError ? `CLI: ${cliError}` : undefined,
+          deletedByCli === false
+            ? "Session still exists after deletion"
+            : undefined,
+        ].filter((value): value is string => !!value);
+        this.deletedSessionIds.delete(sessionId);
+        return {
+          ok: false,
+          error: details.join("; ") || "Could not verify session deletion",
+        };
+      }
     }
 
     if (this.activeSessionId === sessionId) {
@@ -1874,6 +2007,10 @@ export class SessionManager {
 
     this.forgetSideTaskSession(sessionId);
     this.contextUsage.delete(sessionId);
+    this.permissionProfiles.deleteSession(sessionId);
+    const deletedRuntime = this.runtimeForSession(sessionId);
+    if (deletedRuntime) deletedRuntime.sessionId = null;
+    this.sessionRuntimeIds.delete(sessionId);
 
     if (opts.emitSessions !== false) {
       try {
@@ -1899,7 +2036,7 @@ export class SessionManager {
     for (const delay of delays) {
       if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
       try {
-        const sessions = await this.listSessions(null, 1000);
+        const sessions = await this.listSessions(null, 1000, true);
         queried = true;
         if (!sessions.some((session) => session.sessionId === sessionId)) {
           return true;
@@ -1913,7 +2050,10 @@ export class SessionManager {
   }
 
   private async deleteSessionViaCli(sessionId: string): Promise<void> {
-    const bin = this.grokPath || "grok";
+    const bin = this.grokPath || findGrok()?.path;
+    if (!bin) {
+      throw new Error("The bundled Grok Build artifact is missing or invalid");
+    }
     const env = await buildSystemProxyEnvironment();
     return new Promise((resolve, reject) => {
       const child = spawn(bin, ["sessions", "delete", sessionId], {
@@ -1946,8 +2086,9 @@ export class SessionManager {
   async newSession(
     cwd?: string,
     worktree?: WorktreeCreateOptions | null,
+    clientRequestId?: string,
   ): Promise<ConnectionState> {
-    return this.createSession(cwd, false, worktree);
+    return this.createSession(cwd, false, worktree, clientRequestId);
   }
 
   /** Create a persisted ACP session tracked as temporary GUI state. */
@@ -1959,13 +2100,12 @@ export class SessionManager {
     cwd: string | undefined,
     sideTask: boolean,
     worktree?: WorktreeCreateOptions | null,
+    clientRequestId?: string,
   ): Promise<ConnectionState> {
     if (!this.connection || this.state.status !== "ready") {
       const connected = await this.connect(cwd ?? process.cwd());
-      // Reconnecting leaves no session selected, so an isolated chat still
-      // needs its worktree — retry now that the agent is up.
-      if (worktree && connected.status === "ready") {
-        return this.createSession(cwd, sideTask, worktree);
+      if (connected.status === "ready") {
+        return this.createSession(cwd, sideTask, worktree, clientRequestId);
       }
       return connected;
     }
@@ -1995,9 +2135,17 @@ export class SessionManager {
     }
 
     const targetCwd = createdWorktree?.path ?? sourceCwd;
+    const profile = this.permissionProfiles.getDefault();
+    // A fresh runtime initializes on the catalog default. Snapshot the model
+    // chosen in the composer before starting it so the first prompt cannot
+    // race ahead on another provider (normally grok-4.5).
+    const resync = modelResyncArgs(this.modelId, this.reasoningEffort);
+    let runtime: AgentRuntime | null = null;
     try {
+      runtime = (await this.startRuntime(targetCwd, profile)).runtime;
+      this.activateRuntime(runtime, null);
       // Do not cancel other sessions' in-flight turns when creating a new chat.
-      const response = (await this.connection.agent.request(
+      const response = (await runtime.connection.agent.request(
         acp.methods.agent.session.new,
         {
           cwd: targetCwd,
@@ -2006,8 +2154,8 @@ export class SessionManager {
           // `sessionId` is honoured for new sessions, which is what lets the
           // worktree registry row point at the chat we are about to open.
           _meta: presetSessionId
-            ? { ...permissionMeta(this.permissionMode), sessionId: presetSessionId }
-            : permissionMeta(this.permissionMode),
+            ? { ...permissionMeta(profile.approval), sessionId: presetSessionId }
+            : permissionMeta(profile.approval),
         },
       )) as {
         sessionId: string;
@@ -2022,12 +2170,14 @@ export class SessionManager {
 
       this.activeSessionId = response.sessionId;
       this.activeCwd = targetCwd;
+      runtime.sessionId = response.sessionId;
+      this.sessionRuntimeIds.set(response.sessionId, runtime.id);
+      this.permissionProfiles.setSession(response.sessionId, profile);
       if (sideTask) this.rememberSideTaskSession(response.sessionId);
       this.applyModelState(response.models);
       // session/new starts on the agent's catalog default, so re-apply the
       // chosen model. The transcript/session can paint immediately; prompt()
       // waits for the sync.
-      const resync = modelResyncArgs(this.modelId, this.reasoningEffort);
       if (resync) {
         const sessionId = response.sessionId;
         const sync = this.setModel(
@@ -2054,6 +2204,7 @@ export class SessionManager {
         sessionId: response.sessionId,
         cwd: targetCwd,
         isNew: true,
+        clientRequestId,
         isSideTask: sideTask,
         worktree: this.worktrees.get(response.sessionId),
       });
@@ -2074,6 +2225,7 @@ export class SessionManager {
 
       return ready;
     } catch (e) {
+      if (runtime) await this.closeRuntime(runtime.id);
       const message = e instanceof Error ? e.message : String(e);
       const err: ConnectionState = { status: "error", message };
       this.setState(err);
@@ -2124,7 +2276,7 @@ export class SessionManager {
     // The entry must exist before the first await: `handleSessionUpdate`
     // routes replay notifications by looking this session up here.
     const load: HistoryLoad = {
-      gen: this.connectGen,
+      runtimeId: null,
       accumulator: new HistoryMessageAccumulator(),
       startedAt: performance.now(),
       firstUpdateAt: null,
@@ -2144,7 +2296,22 @@ export class SessionManager {
     cwd: string,
     load: HistoryLoad,
   ): Promise<ConnectionState> {
+    // Starting/loading a runtime may publish its saved or catalog default.
+    // Preserve the current picker choice before either operation does so.
+    const resync = modelResyncArgs(this.modelId, this.reasoningEffort);
+    let runtime = this.runtimeForSession(sessionId);
     try {
+      const profile =
+        this.permissionProfiles.getSession(sessionId) ??
+        runtime?.profile ??
+        LEGACY_PERMISSION_PROFILE;
+      if (!runtime) {
+        runtime = (await this.startRuntime(cwd, profile)).runtime;
+        runtime.sessionId = sessionId;
+        this.sessionRuntimeIds.set(sessionId, runtime.id);
+      }
+      load.runtimeId = runtime.id;
+      this.activateRuntime(runtime, sessionId);
       // Switching focus must not stop other sessions that are still running.
       this.activeSessionId = sessionId;
       this.activeCwd = cwd;
@@ -2158,29 +2325,42 @@ export class SessionManager {
       );
       this.send("agent:history-start", { sessionId, cwd });
 
-      const response = (await this.connection!.agent.request(
+      const response = (await runtime.connection.agent.request(
         acp.methods.agent.session.load,
         {
           sessionId,
           cwd,
           mcpServers: this.acpMcpServers(),
           // Re-seed yolo/auto for this session on reconnect (CLI-compatible).
-          _meta: permissionMeta(this.permissionMode),
+          _meta: permissionMeta(profile.approval),
         },
       )) as {
         models?: unknown;
       };
 
+      if (this.deletedSessionIds.has(sessionId)) {
+        this.historyLoads.delete(sessionId);
+        this.clearHistoryPreview();
+        this.send("agent:history-end", {
+          sessionId,
+          cwd,
+          retired: true,
+          messages: [],
+        });
+        return this.state;
+      }
+
       this.applyModelState(response.models);
+      this.permissionProfiles.setSession(sessionId, profile);
       const accumulator = load.accumulator;
       this.historyLoads.delete(sessionId);
       this.clearHistoryPreview();
 
-      // A reconnect during replay retires this load: the agent behind those
-      // notifications is gone, so do not paint them over the new connection.
+      // A process exit during replay retires this load. Another focused
+      // runtime must never receive this transcript.
       // The renderer turned its spinner on at `history-start`, so it still
       // needs an end — `retired` says "settle, but keep nothing".
-      if (load.gen !== this.connectGen) {
+      if (!this.runtimes.has(load.runtimeId)) {
         this.send("agent:history-end", {
           sessionId,
           cwd,
@@ -2193,7 +2373,6 @@ export class SessionManager {
       // Loading a session may report its old/catalog default. Start restoring
       // the app preference now, but do not keep the transcript hidden while
       // that independent ACP round-trip completes. prompt() gates on this map.
-      const resync = modelResyncArgs(this.modelId, this.reasoningEffort);
       if (resync) {
         const sync = this.setModel(
           resync.modelId,
@@ -2254,6 +2433,18 @@ export class SessionManager {
       const message = e instanceof Error ? e.message : String(e);
       this.historyLoads.delete(sessionId);
       this.clearHistoryPreview();
+      if (runtime && !this.isTurnRunning(sessionId)) {
+        await this.closeRuntime(runtime.id);
+      }
+      if (this.deletedSessionIds.has(sessionId)) {
+        this.send("agent:history-end", {
+          sessionId,
+          cwd,
+          retired: true,
+          messages: [],
+        });
+        return this.state;
+      }
       this.activeSessionId = null;
       const err: ConnectionState = { status: "error", message };
       this.setState(err);
@@ -2315,6 +2506,10 @@ export class SessionManager {
     const targetSessionId = this.activeSessionId;
     if (!targetSessionId) {
       return { ok: false, error: "No active session" };
+    }
+    const targetRuntime = this.runtimeForSession(targetSessionId);
+    if (!targetRuntime) {
+      return { ok: false, error: "Session runtime is not loaded" };
     }
     // History can paint before the preferred-model round-trip finishes, but a
     // user prompt must still run with the selected model/effort.
@@ -2394,7 +2589,7 @@ export class SessionManager {
           },
         ];
 
-        const response = (await this.connection.agent.request(
+        const response = (await targetRuntime.connection.agent.request(
           acp.methods.agent.session.prompt,
           {
             sessionId: targetSessionId,
@@ -2526,8 +2721,10 @@ export class SessionManager {
     }
 
     const interjectionId = `ij-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const runtime = this.runtimeForSession(id);
+    if (!runtime) return { ok: false, error: "Session runtime is not loaded" };
     try {
-      await this.connection.agent.request("x.ai/interject", {
+      await runtime.connection.agent.request("x.ai/interject", {
         sessionId: id,
         text: trimmed,
         interjectionId,
@@ -2635,6 +2832,7 @@ export class SessionManager {
    */
   async setPermissionMode(
     mode: PermissionMode,
+    sessionId?: string | null,
   ): Promise<{ ok: boolean; permissionMode: PermissionMode; error?: string }> {
     if (mode !== "ask" && mode !== "auto" && mode !== "always-approve") {
       return {
@@ -2643,19 +2841,49 @@ export class SessionManager {
         error: "Invalid permission mode",
       };
     }
-    this.permissionMode = mode;
-    this.setState(
-      this.state.status === "ready" ? this.readyState() : this.state,
-    );
-
-    if (!this.connection || this.state.status !== "ready") {
+    const desired = profileForMode(mode);
+    if (!sessionId) {
+      this.permissionProfiles.setDefault(desired);
+      this.permissionMode = desired.approval;
+      this.sandboxProfile = desired.sandbox;
+      if (this.state.status === "ready" && !this.activeSessionId) {
+        this.setState(this.readyState());
+      }
       return { ok: true, permissionMode: mode };
     }
 
+    const runtime = this.runtimeForSession(sessionId);
+    const current =
+      this.permissionProfiles.getSession(sessionId) ?? runtime?.profile;
+    if (!runtime || !current) {
+      return {
+        ok: false,
+        permissionMode: current?.approval ?? this.permissionMode,
+        error: "Load the session before changing its permissions",
+      };
+    }
+    if (desired.sandbox !== current.sandbox) {
+      return {
+        ok: false,
+        permissionMode: current.approval,
+        error:
+          "Grok fixes the sandbox when a session process starts. Start a new chat to change between Full access and sandboxed access.",
+      };
+    }
+
+    const updated: PermissionProfile = { ...current, approval: mode };
+    runtime.profile = updated;
+    this.permissionProfiles.setSession(sessionId, updated);
+    if (this.activeSessionId === sessionId) {
+      this.permissionMode = mode;
+      this.sandboxProfile = updated.sandbox;
+      if (this.state.status === "ready") this.setState(this.readyState());
+    }
+
     try {
-      // Explicit booleans: agent seeds auto only from auto_mode / permission_mode=auto,
-      // and yolo only from yolo_mode (must clear the other when switching).
-      await this.connection.agent.notify("x.ai/yolo_mode_changed", {
+      // Each session has its own ACP process, so this Grok-wide notification
+      // cannot mutate another GUI chat's permission mode.
+      await runtime.connection.agent.notify("x.ai/yolo_mode_changed", {
         permission_mode: mode,
         yolo_mode: mode === "always-approve",
         auto_mode: mode === "auto",
@@ -2667,7 +2895,7 @@ export class SessionManager {
       return { ok: true, permissionMode: mode };
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      // Preference is still stored locally for next session/new.
+      // The local profile still controls client-side permission requests.
       return { ok: true, permissionMode: mode, error };
     }
   }
@@ -2685,8 +2913,11 @@ export class SessionManager {
       });
     }
     this.connection = null;
+    this.activeRuntimeId = null;
     this.activeSessionId = null;
-    this.child = null;
+    this.runtimes.clear();
+    this.sessionRuntimeIds.clear();
+    this.closingRuntimeIds.clear();
     this.runningTurns.clear();
     this.historyLoads.clear();
     this.clearHistoryPreview();
@@ -2700,19 +2931,13 @@ export class SessionManager {
 
   private async disconnectInternal(): Promise<void> {
     await this.endComputerUseTurn(null, "agent-disconnected", true);
-    try {
-      this.connection?.close();
-    } catch {
-      // ignore
-    }
-    if (this.child && !this.child.killed) {
-      this.child.kill();
+    for (const runtimeId of [...this.runtimes.keys()]) {
+      await this.closeRuntime(runtimeId);
     }
     this.cleanupProcessOnly();
   }
 
   async disconnect(): Promise<void> {
-    this.connectGen += 1;
     const run = async () => {
       await this.disconnectInternal();
       this.setState({ status: "disconnected" });
@@ -2731,17 +2956,20 @@ function normalizeSessionRow(s: Record<string, unknown>): AgentSessionSummary {
   // Prefer generated title fields from the agent wire shape. Leave empty when
   // unknown so the renderer can localize "untitled" instead of baking English
   // "Untitled session" into state (which desynced sidebar i18n vs topbar).
-  const rawTitle = String(
-    s.title ||
-      s.generated_title ||
-      s.generatedTitle ||
-      s.summary ||
-      s.session_summary ||
-      s.sessionSummary ||
-      "",
-  ).trim();
-  const title =
-    !rawTitle || rawTitle.toLowerCase() === "untitled session" ? "" : rawTitle;
+  const title = [
+    s.title,
+    s.generated_title,
+    s.generatedTitle,
+    s.summary,
+    s.session_summary,
+    s.sessionSummary,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .find(
+      (value) =>
+        value.length > 0 &&
+        !SESSION_TITLE_PLACEHOLDERS.has(value.toLowerCase()),
+    ) ?? "";
   return {
     sessionId,
     title,

@@ -20,6 +20,7 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({
   app: { getPath: () => hoisted.userData },
+  net: { fetch },
   safeStorage: { isEncryptionAvailable: () => false },
   shell: { openExternal: async () => {} },
 }));

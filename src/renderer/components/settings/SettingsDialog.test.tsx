@@ -63,6 +63,32 @@ describe("SettingsDialog", () => {
     expect(screen.queryByLabelText("Language")).toBeNull();
   });
 
+  it("opens the requested category and reapplies it when reopened", async () => {
+    const props = {
+      settings: DEFAULT_GUI_SETTINGS,
+      onChange: vi.fn(),
+      onClose: vi.fn(),
+      update: NO_UPDATE,
+    };
+    const { rerender } = render(
+      <SettingsDialog open initialSection="interface" {...props} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    expect(screen.getByLabelText("Terminal theme")).toBeTruthy();
+
+    rerender(
+      <SettingsDialog open={false} initialSection="providers" {...props} />,
+    );
+    rerender(<SettingsDialog open initialSection="providers" {...props} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Model providers" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Endpoints" })).toBeTruthy();
+    expect(screen.queryByLabelText("Terminal theme")).toBeNull();
+  });
+
   it("reports edits without mutating the passed settings", () => {
     const { onChange } = renderDialog();
 

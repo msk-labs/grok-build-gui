@@ -7,7 +7,7 @@
  */
 
 import path from "node:path";
-import { app, safeStorage, shell } from "electron";
+import { app, net, safeStorage, shell } from "electron";
 import { CHATGPT_MODELS, modelConfigKey } from "./chatgptModels.js";
 import type { ManagedModel } from "./customModels.js";
 import {
@@ -77,7 +77,11 @@ function getStore(): ChatGptTokenStore {
     store = new ChatGptTokenStore({
       dir: path.join(app.getPath("userData"), "providers"),
       vault: createVault(),
-      refresh: (previous) => refreshAccessToken(previous),
+      // `net.fetch` uses Electron/Chromium's system proxy and PAC routing.
+      // Browser authorization follows that route too; Node's global `fetch`
+      // does not, which can make the token exchange arrive from a different IP
+      // and be rejected by the auth service with 403.
+      refresh: (previous) => refreshAccessToken(previous, net.fetch),
     });
   }
   return store;
@@ -98,6 +102,8 @@ function managedModels(proxy: RelayProxy): ManagedModel[] {
     apiBackend: "responses" as const,
     contextWindow: model.contextWindow,
     maxCompletionTokens: model.maxOutputTokens,
+    reasoningEfforts: model.reasoningEfforts,
+    defaultReasoningEffort: model.defaultReasoningEffort,
   }));
 }
 
@@ -107,10 +113,15 @@ async function startRelay(): Promise<RelayProxy> {
     getAccessToken: () => current.getAccessToken(),
     refreshAccessToken: () => current.refreshNow(),
     getAccountId: () => current.getAccount()?.accountId ?? null,
+    // Match OAuth: Chromium owns proxy/PAC/system-network routing. Node's
+    // global fetch can use a different (or stale) proxy and made every model
+    // request fail even though sign-in itself succeeded.
+    fetchImpl: net.fetch,
     onUsage: (windows) => {
       latestUsage = { windows, fetchedAt: Date.now() };
       onUsageChanged?.();
     },
+    onLog: (message) => console.warn(`[grok-gui] ${message}`),
   });
   return proxy;
 }
@@ -176,6 +187,7 @@ export async function loginToChatGpt(): Promise<ChatGptActionResult> {
   }
   const handle = startLogin({
     openExternal: (url) => shell.openExternal(url),
+    fetchImpl: net.fetch,
   });
   activeLogin = handle;
   try {

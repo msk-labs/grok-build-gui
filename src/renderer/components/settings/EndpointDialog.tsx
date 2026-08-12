@@ -1,5 +1,5 @@
 import "./EndpointDialog.css";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ApiBackend,
@@ -41,7 +41,7 @@ export function EndpointDialog({
     endpoint?.apiBackend ?? "chat_completions",
   );
   const [apiKey, setApiKey] = useState("");
-  const [supportsReasoningEffort, setSupportsReasoningEffort] = useState(
+  const [manualReasoningEffort, setManualReasoningEffort] = useState(
     endpoint?.supportsReasoningEffort ?? false,
   );
   const [showKey, setShowKey] = useState(false);
@@ -72,6 +72,7 @@ export function EndpointDialog({
         baseUrl,
         apiKey: apiKey || undefined,
         apiBackend,
+        presetId,
       });
       if (!result.ok) {
         setDiscoverError(result.error);
@@ -94,16 +95,32 @@ export function EndpointDialog({
   }
 
   async function save() {
-    const known = new Map(
-      (discovered ?? []).map((m) => [m.id, m.contextWindow]),
-    );
+    const known = new Map((discovered ?? []).map((model) => [model.id, model]));
     const models = [...selected].map((id) => {
-      const existing = endpoint?.models.find((m) => m.id === id);
+      const discoveredModel = known.get(id);
+      const existing = endpoint?.models.find((model) => model.id === id);
+      const supportsReasoningEffort =
+        discoveredModel?.supportsReasoningEffort ??
+        existing?.supportsReasoningEffort;
+      const reasoningEfforts =
+        discoveredModel?.reasoningEfforts ?? existing?.reasoningEfforts;
+      const defaultReasoningEffort =
+        discoveredModel?.defaultReasoningEffort ??
+        existing?.defaultReasoningEffort;
       return {
         id,
         label: existing?.label ?? id,
         contextWindow:
-          known.get(id) ?? existing?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          discoveredModel?.contextWindow ??
+          existing?.contextWindow ??
+          DEFAULT_CONTEXT_WINDOW,
+        ...(supportsReasoningEffort !== undefined
+          ? { supportsReasoningEffort }
+          : {}),
+        ...(reasoningEfforts?.length
+          ? { reasoningEfforts: [...reasoningEfforts] }
+          : {}),
+        ...(defaultReasoningEffort ? { defaultReasoningEffort } : {}),
       };
     });
     const ok = await onSave({
@@ -113,7 +130,7 @@ export function EndpointDialog({
       apiBackend,
       presetId,
       models,
-      supportsReasoningEffort,
+      supportsReasoningEffort: manualReasoningEffort,
       // Undefined keeps the stored key; the field starts blank when editing.
       ...(apiKey ? { apiKey } : {}),
     });
@@ -121,6 +138,62 @@ export function EndpointDialog({
   }
 
   const preset = presets.find((p) => p.id === presetId);
+  const reasoningCheckboxRef = useRef<HTMLInputElement>(null);
+  const selectedReasoningState = useMemo(() => {
+    const discoveredById = new Map(
+      (discovered ?? []).map((model) => [model.id, model]),
+    );
+    const states = [...selected].map((id) => {
+      const model =
+        discoveredById.get(id) ??
+        endpoint?.models.find((existing) => existing.id === id);
+      return model?.supportsReasoningEffort ?? manualReasoningEffort;
+    });
+    const enabled = states.filter(Boolean).length;
+    return {
+      checked: states.length
+        ? enabled === states.length
+        : manualReasoningEffort,
+      indeterminate: enabled > 0 && enabled < states.length,
+      hasUnknown: [...selected].some((id) => {
+        const model =
+          discoveredById.get(id) ??
+          endpoint?.models.find((existing) => existing.id === id);
+        return model?.supportsReasoningEffort === undefined;
+      }),
+      allKnownSupported:
+        states.length > 0 &&
+        [...selected].every((id) => {
+          const model =
+            discoveredById.get(id) ??
+            endpoint?.models.find((existing) => existing.id === id);
+          return model?.supportsReasoningEffort === true;
+        }),
+      allKnownUnsupported:
+        states.length > 0 &&
+        [...selected].every((id) => {
+          const model =
+            discoveredById.get(id) ??
+            endpoint?.models.find((existing) => existing.id === id);
+          return model?.supportsReasoningEffort === false;
+        }),
+    };
+  }, [discovered, endpoint?.models, manualReasoningEffort, selected]);
+
+  useEffect(() => {
+    if (reasoningCheckboxRef.current) {
+      reasoningCheckboxRef.current.indeterminate =
+        selectedReasoningState.indeterminate;
+    }
+  }, [selectedReasoningState.indeterminate]);
+
+  const reasoningHint = selectedReasoningState.allKnownSupported
+    ? t("endpoints.reasoningEffortDetected")
+    : selectedReasoningState.allKnownUnsupported
+      ? t("endpoints.reasoningEffortUnavailable")
+      : selectedReasoningState.indeterminate
+        ? t("endpoints.reasoningEffortMixed")
+        : t("endpoints.reasoningEffortHint");
 
   return (
     <div
@@ -151,6 +224,7 @@ export function EndpointDialog({
             <ModelIcon modelId={presetId} name={preset?.label} size={22} />
             <select
               className="settings-select endpoint-provider-select"
+              aria-label={t("endpoints.provider")}
               value={presetId}
               onChange={(e) => applyPreset(e.target.value)}
             >
@@ -181,7 +255,10 @@ export function EndpointDialog({
             value={baseUrl}
             placeholder="https://api.example.com/v1"
             spellCheck={false}
-            onChange={(e) => setBaseUrl(e.target.value)}
+            onChange={(e) => {
+              setBaseUrl(e.target.value);
+              setDiscovered(null);
+            }}
           />
         </label>
 
@@ -228,7 +305,10 @@ export function EndpointDialog({
           <select
             className="settings-select"
             value={apiBackend}
-            onChange={(e) => setApiBackend(e.target.value as ApiBackend)}
+            onChange={(e) => {
+              setApiBackend(e.target.value as ApiBackend);
+              setDiscovered(null);
+            }}
           >
             <option value="chat_completions">OpenAI Chat Completions</option>
             <option value="responses">OpenAI Responses</option>
@@ -238,30 +318,30 @@ export function EndpointDialog({
 
         <label className="endpoint-toggle">
           <input
+            ref={reasoningCheckboxRef}
             type="checkbox"
-            checked={supportsReasoningEffort}
-            onChange={(e) => setSupportsReasoningEffort(e.target.checked)}
+            checked={selectedReasoningState.checked}
+            disabled={selected.size > 0 && !selectedReasoningState.hasUnknown}
+            onChange={(e) => setManualReasoningEffort(e.target.checked)}
           />
           <span>
             {t("endpoints.reasoningEffort")}
-            <span className="endpoint-toggle-hint">
-              {t("endpoints.reasoningEffortHint")}
-            </span>
+            <span className="endpoint-toggle-hint">{reasoningHint}</span>
           </span>
         </label>
 
         <div className="endpoint-models">
           <div className="endpoint-models-head">
-            <span>
-              {t("endpoints.models", { count: selected.size })}
-            </span>
+            <span>{t("endpoints.models", { count: selected.size })}</span>
             <button
               type="button"
               className="settings-permission-button"
               disabled={discovering || !baseUrl.trim()}
               onClick={() => void discover()}
             >
-              {discovering ? t("endpoints.loading") : t("endpoints.fetchModels")}
+              {discovering
+                ? t("endpoints.loading")
+                : t("endpoints.fetchModels")}
             </button>
           </div>
 
@@ -289,11 +369,7 @@ export function EndpointDialog({
             <div className="endpoint-model-list">
               {[...selected].map((id) => (
                 <label key={id} className="endpoint-model-row">
-                  <input
-                    type="checkbox"
-                    checked
-                    onChange={() => toggle(id)}
-                  />
+                  <input type="checkbox" checked onChange={() => toggle(id)} />
                   <ModelIcon modelId={id} size={16} />
                   <span>{id}</span>
                 </label>

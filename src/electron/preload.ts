@@ -154,6 +154,8 @@ export type SessionLoadedEvent = {
   sessionId: string;
   cwd: string;
   isNew: boolean;
+  /** Renderer-only correlation for the provisional row that requested session/new. */
+  clientRequestId?: string;
   /** Scratch sessions populate a side pane without taking main-chat focus. */
   isSideTask?: boolean;
   /** Present when the session runs inside a grok-managed git worktree. */
@@ -267,8 +269,10 @@ const api = {
   newSession: (
     cwd?: string,
     worktree?: WorktreeCreateOptions | null,
+    /** Echoed in SessionLoadedEvent; never used as the agent session id. */
+    clientRequestId?: string,
   ): Promise<ConnectionState> =>
-    ipcRenderer.invoke("agent:new-session", cwd, worktree),
+    ipcRenderer.invoke("agent:new-session", cwd, worktree, clientRequestId),
   listWorktrees: (): Promise<{
     ok: boolean;
     worktrees?: WorktreeRecord[];
@@ -482,8 +486,9 @@ const api = {
     ipcRenderer.invoke("agent:get-permission-mode"),
   setPermissionMode: (
     mode: PermissionMode,
+    sessionId?: string | null,
   ): Promise<{ ok: boolean; permissionMode: PermissionMode; error?: string }> =>
-    ipcRenderer.invoke("agent:set-permission-mode", mode),
+    ipcRenderer.invoke("agent:set-permission-mode", mode, sessionId),
   respondPermission: (
     requestId: string,
     optionId: string | null,
@@ -545,6 +550,7 @@ const api = {
     baseUrl: string;
     apiKey?: string;
     apiBackend: ApiBackend;
+    presetId?: string;
   }): Promise<DiscoveryResult> =>
     ipcRenderer.invoke("provider:endpoints:discover", options),
   saveModelEndpoint: (

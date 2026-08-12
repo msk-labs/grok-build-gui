@@ -32,13 +32,59 @@ describe("translateResponsesRequest", () => {
     ).toBe(DEFAULT_INSTRUCTIONS);
   });
 
+  it("moves system and developer messages into instructions", () => {
+    expect(
+      translateResponsesRequest({
+        instructions: "Top-level policy.",
+        input: [
+          {
+            type: "message",
+            role: "system",
+            content: [{ type: "input_text", text: "System policy." }],
+          },
+          {
+            type: "message",
+            role: "developer",
+            content: "Developer policy.",
+          },
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Hello" }],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      instructions:
+        "Top-level policy.\n\nSystem policy.\n\nDeveloper policy.",
+      input: [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Hello" }],
+        },
+      ],
+    });
+  });
+
+  it("does not mutate input while removing system messages", () => {
+    const input = [
+      { type: "message", role: "system", content: "Policy" },
+      { type: "message", role: "user", content: "Hello" },
+    ];
+    translateResponsesRequest({ input });
+    expect(input).toHaveLength(2);
+  });
+
   it("drops fields that need server-side storage", () => {
     const out = translateResponsesRequest({
       previous_response_id: "resp_1",
       service_tier: "auto",
+      max_output_tokens: 128_000,
     });
     expect(out).not.toHaveProperty("previous_response_id");
     expect(out).not.toHaveProperty("service_tier");
+    expect(out).not.toHaveProperty("max_output_tokens");
   });
 
   it("requests encrypted reasoning when reasoning is on", () => {

@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { GROK_AGENT_STDIO_ARGS } from "./agentProcess";
+import {
+  DEFAULT_GROK_SANDBOX_PROFILE,
+  grokAgentStdioArgs,
+} from "./agentProcess";
 
 describe("Grok ACP process arguments", () => {
-  it("does not hold a completed turn open for background processes", () => {
-    expect(GROK_AGENT_STDIO_ARGS).toEqual([
+  it("starts ordinary runtimes inside the workspace sandbox", () => {
+    expect(DEFAULT_GROK_SANDBOX_PROFILE).toBe("workspace");
+    expect(grokAgentStdioArgs(DEFAULT_GROK_SANDBOX_PROFILE)).toEqual([
       "--no-wait-for-background",
+      "--sandbox",
+      "workspace",
+      "agent",
+      "stdio",
+    ]);
+  });
+
+  it("makes the full-access no-sandbox boundary explicit", () => {
+    expect(grokAgentStdioArgs("off")).toEqual([
+      "--no-wait-for-background",
+      "--sandbox",
+      "off",
       "agent",
       "stdio",
     ]);
