@@ -1,0 +1,52 @@
+name: Build Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub release tag to build and upload
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build Windows x64 installer
+        run: npm run package:win
+        env:
+          UPDATE_GITHUB_OWNER: msk-labs
+          UPDATE_GITHUB_REPO: grok-build-gui
+
+      - name: Upload installer and update feed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $assets = @(
+            "out/release/Grok-Build-GUI-$version-win-x64-setup.exe",
+            "out/release/Grok-Build-GUI-$version-win-x64-setup.exe.blockmap",
+            "out/release/latest.yml"
+          )
+          foreach ($asset in $assets) {
+            if (-not (Test-Path $asset)) {
+              throw "Missing release asset: $asset"
+            }
+          }
+          gh release upload $env:RELEASE_TAG $assets --clobber
