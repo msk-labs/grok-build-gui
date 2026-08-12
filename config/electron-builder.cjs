@@ -124,7 +124,9 @@ module.exports = {
     icon: "resources/icon.icns",
     iconSize: 112,
     iconTextSize: 15,
-    sign: false,
+    // Sign before electron-builder generates the blockmap and update manifest,
+    // otherwise a post-build signature would invalidate their size and hash.
+    sign: true,
     window: {
       width: 760,
       height: 460,

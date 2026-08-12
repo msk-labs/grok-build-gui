@@ -86,12 +86,6 @@ if (!existsSync(dmgPath)) {
   throw new Error(`Expected DMG was not created at ${dmgPath}.`);
 }
 
-run("codesign", [
-  "--force",
-  "--sign",
-  identity,
-  dmgPath,
-]);
 run("codesign", ["--verify", "--strict", "--verbose=4", dmgPath]);
 run("hdiutil", ["verify", dmgPath]);
 
