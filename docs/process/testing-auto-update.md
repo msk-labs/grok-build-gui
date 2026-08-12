@@ -86,7 +86,7 @@ inside the client.
    existing copy you care about:
 
    ```bash
-   cp -R "out/release/mac-arm64/Grok Build GUI.app" ~/Applications/
+   cp -R "out/release/mac-arm64/Grok GUI.app" ~/Applications/
    ```
 
 4. Serve the 0.1.1 artifacts on the port the bundle was built against:
@@ -129,9 +129,9 @@ will download updates forever without being able to install them. Back it up.
 
 - Settings → Updates shows the reason in words. "No release feed configured"
   means the build had no `UPDATE_GITHUB_*` env vars — check
-  `Grok Build GUI.app/Contents/Resources/app-update.yml` exists.
+  `Grok GUI.app/Contents/Resources/app-update.yml` exists.
 - The updater's own log lives at
-  `~/Library/Logs/Grok Build GUI/main.log`.
+  `~/Library/Logs/Grok GUI/main.log`.
 - An unsigned or ad-hoc-signed build (`MAC_SIGNING_IDENTITY=-`) downloads but
   cannot install: Squirrel refuses to replace a bundle whose signature does not
-  match. Use the real Developer ID build for level 3.
+  match. Use a release signed with the stable `Grok Desktop` identity for level 3.

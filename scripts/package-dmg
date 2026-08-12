@@ -8,7 +8,7 @@ cd "$project_root"
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/package-dmg             Build the signed and notarized release DMG
+  ./scripts/package-dmg             Build the self-signed release DMG
   ./scripts/package-dmg --preview   Build an ad-hoc signed DMG for local verification
   ./scripts/package-dmg --help      Show this help
 

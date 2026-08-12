@@ -3,13 +3,12 @@ const grokManifest = require("./runtime/grok-build.json");
 const computerUseManifest = require("./runtime/open-computer-use.json");
 
 /**
- * Signing identity, from the environment only. A committed default would
- * publish the signer's name and Team ID into an open repository, and on
- * another machine it would silently pick a certificate nobody chose. Unset
- * means unsigned: the build runs locally, but Squirrel.Mac cannot install an
- * update over it — see docs/process/MAC_RELEASE.md.
+ * Signing identity, supplied by the release script. Public releases use the
+ * stable self-signed "Grok Desktop" certificate so no legal name or Apple Team
+ * ID is exposed. Unset means unsigned: the build runs locally, but Squirrel.Mac
+ * cannot install an update over it — see docs/process/MAC_RELEASE.md.
  *
- *   MAC_SIGNING_IDENTITY="Developer ID Application: Example Ltd (ABCDE12345)"
+ *   MAC_SIGNING_IDENTITY="Grok Desktop"
  *   MAC_SIGNING_IDENTITY=-   ad-hoc; local smoke tests only, breaks updates
  */
 const developerIdApplication = process.env.MAC_SIGNING_IDENTITY ?? null;
@@ -63,7 +62,7 @@ if (!publish) {
 module.exports = {
   appId: "ai.grok.build.gui",
   ...(publish ? { publish } : {}),
-  productName: "Grok Build GUI",
+  productName: "Grok GUI",
   directories: {
     buildResources: "resources",
     output: "out/release",
@@ -93,6 +92,9 @@ module.exports = {
     category: "public.app-category.developer-tools",
     icon: "resources/icon.icns",
     identity: developerIdApplication,
+    // Self-signed certificates cannot use Apple's trusted timestamp service.
+    // Disabling it also avoids a network wait for every signed resource.
+    timestamp: "none",
     hardenedRuntime: true,
     notarize: false,
     entitlements: "resources/entitlements.mac.plist",
@@ -102,7 +104,7 @@ module.exports = {
     // spaces: GitHub rewrites those to dots on upload ("Grok.Build.GUI-…"),
     // while latest-mac.yml records the dashed form, so electron-updater asks
     // for a URL that 404s. Naming the zip here keeps the two identical.
-    artifactName: "Grok-Build-GUI-${version}-${arch}-mac.${ext}",
+    artifactName: "Grok-GUI-${version}-${arch}-mac.${ext}",
     // Squirrel.Mac updates from a zip, not the DMG — the DMG stays the
     // human download, the zip is what electron-updater fetches.
     target: [
@@ -113,11 +115,11 @@ module.exports = {
   win: {
     icon: "resources/icon.png",
     target: [{ target: "nsis", arch: ["x64"] }],
-    artifactName: "Grok-Build-GUI-${version}-win-${arch}-setup.${ext}",
+    artifactName: "Grok-GUI-${version}-win-${arch}-setup.${ext}",
   },
   dmg: {
-    artifactName: "Grok-Build-GUI-${version}-mac-${arch}.${ext}",
-    title: "Grok Build GUI Installer",
+    artifactName: "Grok-GUI-${version}-mac-${arch}.${ext}",
+    title: "Grok GUI Installer",
     background: "dmg-background.png",
     icon: "resources/icon.icns",
     iconSize: 112,

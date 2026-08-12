@@ -13,7 +13,7 @@ const packageJson = JSON.parse(
 const releaseDir = path.join(projectRoot, "out", "release");
 const installerPath = path.join(
   releaseDir,
-  `Grok-Build-GUI-${packageJson.version}-win-x64-setup.exe`,
+  `Grok-GUI-${packageJson.version}-win-x64-setup.exe`,
 );
 const electronBuilder = path.join(
   projectRoot,

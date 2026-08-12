@@ -245,7 +245,7 @@ async function promptForComputerUsePermissions(
     message:
       "Allow Accessibility and Screen Recording so Open Computer Use can control your Mac.",
     detail:
-      "Open System Settings → Privacy & Security, enable both permissions for Grok Build GUI, then restart the app.",
+      "Open System Settings → Privacy & Security, enable both permissions for Grok GUI, then restart the app.",
     buttons: ["Open System Settings", "Later"],
     defaultId: 0,
     cancelId: 1,
@@ -283,7 +283,7 @@ function createWindow() {
     ...placement.bounds,
     minWidth: 900,
     minHeight: 600,
-    title: "Grok Build GUI",
+    title: "Grok GUI",
     // Keep the Windows renderer transparent so the DWM glass material remains
     // visible beneath the web chrome. Other platforms retain their fallback.
     backgroundColor: isWin ? "#00000000" : isMac ? "#f0f1f3" : "#ffffff",

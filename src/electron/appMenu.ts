@@ -72,7 +72,7 @@ function buildTemplate(): MenuItemConstructorOptions[] {
       id: "help",
       submenu: [
         {
-          label: "Grok Build GUI",
+          label: "Grok GUI",
           enabled: false,
         },
         {

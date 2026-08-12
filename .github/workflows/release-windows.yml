@@ -40,8 +40,8 @@ jobs:
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
           $assets = @(
-            "out/release/Grok-Build-GUI-$version-win-x64-setup.exe",
-            "out/release/Grok-Build-GUI-$version-win-x64-setup.exe.blockmap",
+            "out/release/Grok-GUI-$version-win-x64-setup.exe",
+            "out/release/Grok-GUI-$version-win-x64-setup.exe.blockmap",
             "out/release/latest.yml"
           )
           foreach ($asset in $assets) {

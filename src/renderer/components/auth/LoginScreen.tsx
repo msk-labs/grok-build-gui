@@ -32,7 +32,7 @@ export function LoginScreen({
           <img src={appIcon} alt="" />
         </div>
         <div className="auth-copy">
-          <p className="auth-eyebrow">Grok Build GUI</p>
+          <p className="auth-eyebrow">Grok GUI</p>
           <h1 id="auth-title">{t("auth.signInTitle")}</h1>
           <p className="auth-description">
             {t("auth.description")}

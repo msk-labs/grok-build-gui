@@ -140,7 +140,7 @@ export const zhCN: Record<TranslationKey, string> = {
   "main.scrollBottomAria": "滚动到底部并恢复自动滚动",
   "main.connectionIssue": "连接异常",
   "main.emptyHistory": "会话已加载，但没有找到受支持的聊天记录。",
-  "main.preloadMissing": "应用桥接不可用，请重启 Grok Build GUI。",
+  "main.preloadMissing": "应用桥接不可用，请重启 Grok GUI。",
   "chat.turnNavigation": "对话轮次",
   "chat.turnLabel": "第 {{number}} 轮",
   "chat.imageTurn": "图片附件 · 第 {{number}} 轮",

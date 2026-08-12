@@ -1,4 +1,4 @@
-<h1 align="center">Grok Build GUI</h1>
+<h1 align="center">Grok GUI</h1>
 
 <p align="center">
   <a href="https://x.ai/cli">Grok Build</a> 的桌面<strong>控制面板</strong>，
@@ -25,7 +25,7 @@
 
 <p align="center">
   <img src="docs/images/screenshot.jpg" width="900"
-       alt="Grok Build GUI 在 macOS 上的界面——会话侧边栏、工作区与分支选择器、消息输入框">
+       alt="Grok GUI 在 macOS 上的界面——会话侧边栏、工作区与分支选择器、消息输入框">
 </p>
 
 ---
@@ -98,7 +98,7 @@ Grok Build 本身是一个终端 agent。本应用在它前面放了一套真正
 
 <p align="center">
   <img src="docs/images/sign-in.jpg" width="620"
-       alt="Grok Build GUI 的登录窗口，界面语言为简体中文">
+       alt="Grok GUI 的登录窗口，界面语言为简体中文">
   <br>
   <em>登录会跳转到浏览器中的 xAI 官方授权页面，授权完成后应用自动登录。</em>
 </p>
@@ -238,7 +238,7 @@ npm run artifacts:verify
 npm run package:win
 ```
 
-安装包输出到 `out/release/Grok-Build-GUI-<version>-win-x64-setup.exe`。
+安装包输出到 `out/release/Grok-GUI-<version>-win-x64-setup.exe`。
 
 在 Apple Silicon 的 Mac 上构建 macOS DMG：
 

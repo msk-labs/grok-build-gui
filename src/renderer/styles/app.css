@@ -451,7 +451,7 @@ html[data-platform="win32"] .sidebar-resizer {
 /*
  * Sidebar top chrome + product title:
  * 1) Collapse toggle sits on the traffic-light band (Codex-style align).
- * 2) "Grok Build GUI" sits below, above New chat / session list.
+ * 2) "Grok GUI" sits below, above New chat / session list.
  */
 .sidebar-brand {
   display: flex;

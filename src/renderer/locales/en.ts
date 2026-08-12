@@ -150,7 +150,7 @@ export const en = {
   "main.emptyHistory":
     "Session loaded, but no supported chat history was found.",
   "main.preloadMissing":
-    "The app bridge is unavailable. Restart Grok Build GUI.",
+    "The app bridge is unavailable. Restart Grok GUI.",
   "chat.turnNavigation": "Conversation turns",
   "chat.turnLabel": "Turn {{number}}",
   "chat.imageTurn": "Image attachment · Turn {{number}}",

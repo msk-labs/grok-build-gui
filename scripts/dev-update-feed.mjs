@@ -32,7 +32,7 @@ function arg(name, fallback) {
 const version = arg("version", "9.9.9");
 const port = Number(arg("port", "8099"));
 const sizeMb = Number(arg("size", "40"));
-const archiveName = `Grok-Build-GUI-${version}-mac-arm64.zip`;
+const archiveName = `Grok-GUI-${version}-arm64-mac.zip`;
 
 // Big enough that the progress ring visibly fills over a local connection.
 const archive = Buffer.concat(

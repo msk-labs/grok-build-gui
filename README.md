@@ -1,4 +1,4 @@
-<h1 align="center">Grok Build GUI</h1>
+<h1 align="center">Grok GUI</h1>
 
 <p align="center">
   A desktop <strong>control plane</strong> for
@@ -25,7 +25,7 @@
 
 <p align="center">
   <img src="docs/images/screenshot.jpg" width="900"
-       alt="Grok Build GUI on macOS — session sidebar, workspace and branch picker, and the message composer">
+       alt="Grok GUI on macOS — session sidebar, workspace and branch picker, and the message composer">
 </p>
 
 ---
@@ -111,7 +111,7 @@ before it is shown or logged.
 
 <p align="center">
   <img src="docs/images/sign-in.jpg" width="620"
-       alt="The Grok Build GUI sign-in window, shown with the interface language set to Simplified Chinese">
+       alt="The Grok GUI sign-in window, shown with the interface language set to Simplified Chinese">
   <br>
   <em>Sign-in hands off to xAI's OAuth page in your browser — shown here with the
   interface language set to Simplified Chinese.</em>
@@ -261,7 +261,7 @@ npm run package:win
 ```
 
 The installer is written to
-`out/release/Grok-Build-GUI-<version>-win-x64-setup.exe`.
+`out/release/Grok-GUI-<version>-win-x64-setup.exe`.
 
 On an Apple Silicon Mac, build the macOS DMG with:
 
