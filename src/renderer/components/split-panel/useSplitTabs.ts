@@ -34,6 +34,10 @@ function pathKey(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
+function fileViewKey(view: FileViewPayload): string {
+  return `${pathKey(view.root ?? "")}\0${pathKey(view.path)}`;
+}
+
 /**
  * Tab model for one split panel instance.
  * Terminals and fileviews are multi-tab; other tools are singletons (focus existing).
@@ -201,12 +205,12 @@ export function useSplitTabs({
       setTabs((prev) => {
         // fileview: one tab per path (click A then B → two tabs); same path re-focuses.
         if (tool === "fileview" && opts?.fileView) {
-          const key = pathKey(opts.fileView.path);
+          const key = fileViewKey(opts.fileView);
           const existing = prev.find(
             (t) =>
               t.tool === "fileview" &&
-              t.fileView?.path != null &&
-              pathKey(t.fileView.path) === key,
+              t.fileView != null &&
+              fileViewKey(t.fileView) === key,
           );
           if (existing) {
             setActiveId(existing.id);

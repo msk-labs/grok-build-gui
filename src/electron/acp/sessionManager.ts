@@ -2520,8 +2520,12 @@ export class SessionManager {
 
     const abort = new AbortController();
     this.runningTurns.set(targetSessionId, abort);
+    // Bind artifact discovery to the target session, not whichever runtime is
+    // currently focused. A background/side-task prompt may run after the user
+    // switches chats; using activeCwd there attaches another workspace's files
+    // to this session and the preview correctly rejects them as out-of-root.
     const scanRoot =
-      this.worktrees.get(targetSessionId)?.path || this.activeCwd;
+      this.worktrees.get(targetSessionId)?.path || targetRuntime.cwd;
     if (scanRoot) {
       this.turnScans.set(targetSessionId, {
         root: scanRoot,

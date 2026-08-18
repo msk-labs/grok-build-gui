@@ -141,7 +141,11 @@ export function UserMessage({
     >
       <div className="message-stack">
         {m.images && m.images.length > 0 ? (
-          <div className="message-images">
+          <div
+            className={`message-images${
+              m.images.length > 1 ? " is-gallery" : ""
+            }`}
+          >
             {m.images.map((img) => (
               <button
                 key={img.id}

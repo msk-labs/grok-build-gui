@@ -16,6 +16,8 @@ export type SplitEntry = "home" | "terminal";
 /** Payload for a fileview tab (diff or full content). */
 export type FileViewPayload = {
   path: string;
+  /** Workspace captured from the session that opened this file. */
+  root?: string;
   mode: "diff" | "content";
   oldText?: string | null;
   newText?: string;

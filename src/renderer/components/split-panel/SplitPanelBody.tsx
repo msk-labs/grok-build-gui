@@ -65,6 +65,10 @@ export function SplitPanelBody({
   onOpenFile,
 }: Props) {
   const { t } = useTranslation();
+  const activeSideTaskSession =
+    activeTab?.tool === "side-task"
+      ? (sideTaskSessions.find((s) => s.id === activeTab.sessionId) ?? null)
+      : null;
   if (showHome || !activeTab) {
     return (
       <SplitHome
@@ -96,10 +100,8 @@ export function SplitPanelBody({
       return open ? (
         <SideTaskPane
           key={activeTab.id}
-          session={
-            sideTaskSessions.find((s) => s.id === activeTab.sessionId) ?? null
-          }
-          workspaceRoot={workspaceRoot}
+          session={activeSideTaskSession}
+          workspaceRoot={activeSideTaskSession?.cwd || workspaceRoot}
           disabled={sideTaskDisabled}
           promptQueue={sideTaskPromptQueue.filter(
             (item) => item.sessionId === activeTab.sessionId,

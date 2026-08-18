@@ -96,6 +96,8 @@ export const zhCN: Record<TranslationKey, string> = {
   "nav.deleteProjectFailed": "删除项目会话失败。",
   "nav.deleteProjectConfirm":
     "要删除项目“{{name}}”及其 {{count}} 个会话吗？此操作无法撤销。",
+  "nav.renameSession": "重命名会话",
+  "nav.renameSessionFailed": "重命名会话失败。",
   "nav.deleteSession": "删除会话",
   "nav.deleteSessionFailed": "删除会话失败。",
   "nav.deleteSessionConfirm": "要删除会话“{{name}}”吗？此操作无法撤销。",

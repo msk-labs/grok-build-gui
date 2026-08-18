@@ -1,5 +1,6 @@
 import type {
   AssistantBlock,
+  ChatImage,
   ChatMessage,
   ToolCallItem,
   ToolContent,
@@ -20,7 +21,13 @@ type SessionUpdate = {
    * - tool_call / tool_call_update: ToolCallContent[] (content | diff)
    */
   content?:
-    | { type?: string; text?: string }
+    | {
+        type?: string;
+        text?: string;
+        data?: string;
+        mimeType?: string;
+        uri?: string;
+      }
     | Array<Record<string, unknown>>
     | null;
   title?: string;
@@ -32,6 +39,11 @@ type SessionUpdate = {
   rawOutput?: unknown;
 };
 
+type MessageContent = Exclude<
+  SessionUpdate["content"],
+  Array<Record<string, unknown>> | null | undefined
+>;
+
 /** Message-chunk content is a single text block, not a tool content array. */
 function textChunk(
   content: SessionUpdate["content"],
@@ -39,6 +51,33 @@ function textChunk(
   if (!content || Array.isArray(content)) return null;
   if (content.type !== "text" || typeof content.text !== "string") return null;
   return content.text;
+}
+
+/** Restore a user image emitted during `session/load` replay. */
+function userImageChunk(content: SessionUpdate["content"]): ChatImage | null {
+  if (!content || Array.isArray(content) || content.type !== "image") {
+    return null;
+  }
+  const image = content as MessageContent;
+  const mimeType =
+    typeof image.mimeType === "string" && image.mimeType.startsWith("image/")
+      ? image.mimeType
+      : "image/png";
+  const data = typeof image.data === "string" ? image.data.trim() : "";
+  const uri = typeof image.uri === "string" ? image.uri.trim() : "";
+  const dataUrl = data
+    ? data.startsWith("data:")
+      ? data
+      : `data:${mimeType};base64,${data}`
+    : uri.startsWith("data:")
+      ? uri
+      : "";
+  if (!dataUrl) return null;
+  return {
+    id: uid("img"),
+    mimeType,
+    dataUrl,
+  };
 }
 
 function imageFromInner(inner: Record<string, unknown>): ToolImageContent | null {
@@ -459,11 +498,16 @@ export function applySessionUpdate(
       // user messages from agent replay (`session/load`).
       if (!isReplay) return messages;
       const chunk = textChunk(update.content);
-      if (!chunk) return messages;
+      const image = userImageChunk(update.content);
+      if (!chunk && !image) return messages;
       const { messages: next, index } = ensureUser(messages);
       const msg = next[index];
       if (msg.role !== "user") return messages;
-      next[index] = { ...msg, text: msg.text + chunk };
+      next[index] = {
+        ...msg,
+        text: chunk ? msg.text + chunk : msg.text,
+        images: image ? [...(msg.images ?? []), image] : msg.images,
+      };
       return next;
     }
     case "agent_message_chunk": {
@@ -566,6 +610,7 @@ type DraftUser = {
   id: string;
   role: "user";
   textParts: string[];
+  images: ChatImage[];
   createdAt: number;
 };
 
@@ -586,6 +631,7 @@ function draftToMessage(d: DraftMessage): ChatMessage {
       id: d.id,
       role: "user",
       text: d.textParts.join(""),
+      images: d.images.length > 0 ? d.images : undefined,
       createdAt: d.createdAt,
     };
   }
@@ -623,6 +669,7 @@ function ensureDraftUser(drafts: DraftMessage[]): DraftUser {
     id: uid("u"),
     role: "user",
     textParts: [],
+    images: [],
     createdAt: Date.now(),
   };
   drafts.push(u);
@@ -690,6 +737,8 @@ export class HistoryMessageAccumulator {
         {
           const chunk = textChunk(update.content);
           if (chunk) ensureDraftUser(this.drafts).textParts.push(chunk);
+          const image = userImageChunk(update.content);
+          if (image) ensureDraftUser(this.drafts).images.push(image);
         }
         break;
       }

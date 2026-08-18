@@ -316,6 +316,7 @@ function WorkspaceApp({
       placement: "right",
       fileView: {
         path: req.path,
+        root: req.root,
         mode: req.mode,
         oldText: req.oldText,
         newText: req.newText,
@@ -352,6 +353,7 @@ function WorkspaceApp({
             loadingHistory={app.loadingHistory}
             onNew={handleNew}
             onSelect={handleSelect}
+            onRename={(id, title) => void app.handleRename(id, title)}
             onDelete={(id) => void app.handleDelete(id)}
             onDeleteProject={(cwd, name) =>
               void app.handleDeleteProject(cwd, name)

@@ -98,6 +98,8 @@ export const en = {
   "nav.deleteProjectFailed": "Failed to delete project sessions.",
   "nav.deleteProjectConfirm":
     "Delete project “{{name}}” and its {{count}} session(s)? This cannot be undone.",
+  "nav.renameSession": "Rename session",
+  "nav.renameSessionFailed": "Failed to rename session.",
   "nav.deleteSession": "Delete session",
   "nav.deleteSessionFailed": "Failed to delete session.",
   "nav.deleteSessionConfirm":

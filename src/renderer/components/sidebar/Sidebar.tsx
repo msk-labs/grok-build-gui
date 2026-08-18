@@ -42,6 +42,7 @@ export type SidebarProps = {
   /** Start a new chat; path pins project draft, `null` forces task draft. */
   onNew: (cwd?: string | null) => void;
   onSelect: (id: string) => void;
+  onRename: (id: string, nextTitle: string) => void;
   onDelete: (id: string) => void;
   /** Delete all sessions under a project folder (cwd). */
   onDeleteProject: (cwd: string, projectName: string) => void;
@@ -76,6 +77,7 @@ export function Sidebar({
   loadingHistory,
   onNew,
   onSelect,
+  onRename,
   onDelete,
   onDeleteProject,
   onRetryConnect,
@@ -129,6 +131,9 @@ export function Sidebar({
     loadCollapsedFolders,
   );
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(
+    null,
+  );
   const [renamingCwd, setRenamingCwd] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -138,6 +143,7 @@ export function Sidebar({
     setSearchOpen(true);
     setAccountMenuOpen(false);
     setMenuId(null);
+    setRenamingSessionId(null);
     setRenamingCwd(null);
   }
 
@@ -150,6 +156,7 @@ export function Sidebar({
       if (el.closest?.(".session-item-menu")) return;
       if (el.closest?.(".session-group-more")) return;
       if (el.closest?.(".session-item-more")) return;
+      if (el.closest?.(".session-item-rename")) return;
       if (el.closest?.(".session-group-rename")) return;
       if (accountMenuRef.current?.contains(target)) return;
       setMenuId(null);
@@ -158,6 +165,7 @@ export function Sidebar({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setMenuId(null);
+        setRenamingSessionId(null);
         setAccountMenuOpen(false);
       }
     }
@@ -206,6 +214,7 @@ export function Sidebar({
     e.preventDefault();
     e.stopPropagation();
     setAccountMenuOpen(false);
+    setRenamingSessionId(null);
     setRenamingCwd(null);
     setMenuId((cur) => (cur === id ? null : id));
   }
@@ -215,6 +224,21 @@ export function Sidebar({
     e.stopPropagation();
     setMenuId(null);
     onDelete(id);
+  }
+
+  function handleRenameSession(id: string) {
+    setMenuId(null);
+    setRenamingCwd(null);
+    setRenamingSessionId(id);
+  }
+
+  function handleRenameSessionCommit(id: string, nextTitle: string) {
+    setRenamingSessionId(null);
+    onRename(id, nextTitle);
+  }
+
+  function handleRenameSessionCancel() {
+    setRenamingSessionId(null);
   }
 
   function handleRenameProject(cwd: string) {
@@ -334,6 +358,7 @@ export function Sidebar({
         fault={fault}
         collapsed={collapsed}
         menuId={menuId}
+        renamingSessionId={renamingSessionId}
         renamingCwd={renamingCwd}
         disabled={disabled}
         loadingHistory={loadingHistory}
@@ -341,6 +366,9 @@ export function Sidebar({
         onNew={onNew}
         onSelect={onSelect}
         onOpenMenu={openMenu}
+        onRename={handleRenameSession}
+        onRenameCommit={handleRenameSessionCommit}
+        onRenameCancel={handleRenameSessionCancel}
         onDelete={handleDelete}
         onRenameProject={handleRenameProject}
         onRenameProjectCommit={handleRenameProjectCommit}

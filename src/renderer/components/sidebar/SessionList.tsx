@@ -39,6 +39,8 @@ type Props = {
   fault: string | null;
   collapsed: Record<string, boolean>;
   menuId: string | null;
+  /** Session currently being renamed (inline input). */
+  renamingSessionId: string | null;
   /** Project cwd currently being renamed (inline input). */
   renamingCwd: string | null;
   disabled: boolean;
@@ -48,6 +50,9 @@ type Props = {
   onNew: (cwd?: string | null) => void;
   onSelect: (id: string) => void;
   onOpenMenu: (e: ReactMouseEvent, id: string) => void;
+  onRename: (id: string) => void;
+  onRenameCommit: (id: string, nextTitle: string) => void;
+  onRenameCancel: () => void;
   onDelete: (e: ReactMouseEvent, id: string) => void;
   onRenameProject: (cwd: string) => void;
   onRenameProjectCommit: (cwd: string, nextName: string) => void;
@@ -73,6 +78,7 @@ export function SessionList({
   fault,
   collapsed,
   menuId,
+  renamingSessionId,
   renamingCwd,
   disabled,
   loadingHistory,
@@ -80,6 +86,9 @@ export function SessionList({
   onNew,
   onSelect,
   onOpenMenu,
+  onRename,
+  onRenameCommit,
+  onRenameCancel,
   onDelete,
   onRenameProject,
   onRenameProjectCommit,
@@ -178,9 +187,13 @@ export function SessionList({
                           session={s}
                           active={s.id === activeId}
                           menuOpen={menuId === s.id}
+                          renaming={renamingSessionId === s.id}
                           disabled={disabled}
                           onSelect={onSelect}
                           onOpenMenu={onOpenMenu}
+                          onRename={onRename}
+                          onRenameCommit={onRenameCommit}
+                          onRenameCancel={onRenameCancel}
                           onDelete={onDelete}
                         />
                       ))}
@@ -250,9 +263,13 @@ export function SessionList({
                   session={s}
                   active={s.id === activeId}
                   menuOpen={menuId === s.id}
+                  renaming={renamingSessionId === s.id}
                   disabled={disabled}
                   onSelect={onSelect}
                   onOpenMenu={onOpenMenu}
+                  onRename={onRename}
+                  onRenameCommit={onRenameCommit}
+                  onRenameCancel={onRenameCancel}
                   onDelete={onDelete}
                 />
               ))}

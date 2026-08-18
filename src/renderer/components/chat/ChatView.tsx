@@ -132,6 +132,17 @@ export function ChatView({
   /** First message id — session/list changes re-pin to bottom. */
   const firstIdRef = useRef<string | undefined>(messages[0]?.id);
   const lastFocusNonce = useRef<number | null>(null);
+  const rootedOpenFile = useMemo(
+    () =>
+      onOpenFile
+        ? (request: OpenFileViewRequest) =>
+            onOpenFile({
+              ...request,
+              root: request.root ?? workspaceRoot,
+            })
+        : undefined,
+    [onOpenFile, workspaceRoot],
+  );
   const turns = useMemo<ChatTurn[]>(
     () =>
       messages
@@ -469,7 +480,7 @@ export function ChatView({
               <MessageBubble
                 key={m.id}
                 message={m}
-                onOpenFile={onOpenFile}
+                onOpenFile={rootedOpenFile}
                 workspaceRoot={workspaceRoot}
                 highlightQuery={focused ? searchFocus.query : null}
                 searchFocus={focused}

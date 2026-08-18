@@ -26,10 +26,11 @@ function setup(entry: SplitEntry = "home") {
 function openFileView(
   result: { current: ReturnType<typeof useSplitTabs> },
   path: string,
+  root?: string,
 ) {
   act(() => {
     result.current.openTool("fileview", {
-      fileView: { path, mode: "diff", oldText: "ONE.", newText: "TWO." },
+      fileView: { path, root, mode: "diff", oldText: "ONE.", newText: "TWO." },
     });
   });
 }
@@ -84,5 +85,17 @@ describe("useSplitTabs file views on session switch", () => {
 
     expect(result.current.tabs).toHaveLength(1);
     expect(onCollapse).not.toHaveBeenCalled();
+  });
+
+  it("does not merge the same relative path from different session roots", () => {
+    const { result } = setup();
+    openFileView(result, "report.xlsx", "/workspace/one");
+    openFileView(result, "report.xlsx", "/workspace/two");
+
+    expect(result.current.tabs).toHaveLength(2);
+    expect(result.current.tabs.map((tab) => tab.fileView?.root)).toEqual([
+      "/workspace/one",
+      "/workspace/two",
+    ]);
   });
 });

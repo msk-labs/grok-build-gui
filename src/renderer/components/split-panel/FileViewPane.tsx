@@ -25,6 +25,9 @@ export function FileViewPane({ view, workspaceRoot }: Props) {
   const [diskText, setDiskText] = useState<string | null>(null);
   const [diskError, setDiskError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // A file tab belongs to the session that opened it. Keep that root stable
+  // even if another chat becomes active before the preview request runs.
+  const fileRoot = view.root?.trim() || workspaceRoot?.trim() || "";
 
   // Office files are binary containers, so they bypass the text read entirely
   // and go straight to the dedicated viewers.
@@ -45,7 +48,7 @@ export function FileViewPane({ view, workspaceRoot }: Props) {
       setDiskError(null);
       return;
     }
-    const root = workspaceRoot?.trim();
+    const root = fileRoot;
     if (!root || !window.grok?.readTextFile) {
       setDiskError(t("files.workspaceUnavailableLoad"));
       return;
@@ -84,7 +87,7 @@ export function FileViewPane({ view, workspaceRoot }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [needsDisk, view.path, workspaceRoot, t]);
+  }, [fileRoot, needsDisk, view.path, t]);
 
   const title = basename(view.path) || view.path;
   const isDiff = view.mode === "diff";
@@ -113,7 +116,7 @@ export function FileViewPane({ view, workspaceRoot }: Props) {
         {isDiff ? (
           <DiffLines oldText={view.oldText} newText={view.newText ?? ""} />
         ) : isOffice ? (
-          <OfficeView root={workspaceRoot ?? ""} path={view.path} />
+          <OfficeView root={fileRoot} path={view.path} />
         ) : loading ? (
           <div className="file-view-empty">{t("common.loading")}</div>
         ) : diskError ? (

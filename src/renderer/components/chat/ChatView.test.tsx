@@ -50,4 +50,33 @@ describe("ChatView auto-scroll", () => {
     expect(assignments).not.toContain(1_200);
     expect(scrollTop).toBe(650);
   });
+
+  it("captures the owning session root when a produced file is opened", () => {
+    const onOpenFile = vi.fn();
+    const assistant: ChatMessage = {
+      id: "assistant",
+      role: "assistant",
+      blocks: [{ id: "text", type: "text", text: "Done" }],
+      artifacts: ["reports/weekly.xlsx"],
+      streaming: false,
+      createdAt: 1,
+    };
+    const view = render(
+      <ChatView
+        messages={[assistant]}
+        workspaceRoot="/workspace/owned-by-session"
+        onOpenFile={onOpenFile}
+      />,
+    );
+
+    fireEvent.click(view.getByTitle("reports/weekly.xlsx"));
+
+    expect(onOpenFile).toHaveBeenCalledWith({
+      path: "reports/weekly.xlsx",
+      root: "/workspace/owned-by-session",
+      mode: "content",
+      oldText: undefined,
+      newText: undefined,
+    });
+  });
 });

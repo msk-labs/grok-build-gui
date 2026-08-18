@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 
 export type OpenFileViewRequest = {
   path: string;
+  /** Session workspace that authorized this path. Captured when opened. */
+  root?: string;
   /** diff: show +/−; content: full new file body (no git markers). */
   mode: "diff" | "content";
   oldText?: string | null;

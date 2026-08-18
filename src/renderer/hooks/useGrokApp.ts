@@ -820,6 +820,33 @@ export function useGrokApp() {
     }
   }
 
+  async function handleRename(id: string, nextTitle: string) {
+    if (!window.grok || isProvisionalSessionId(id)) return;
+    const title = nextTitle.trim();
+    if (!title) return;
+    const row = sessionsRef.current.find((session) => session.id === id);
+    if (row?.title?.trim() === title) return;
+
+    try {
+      const result = await window.grok.renameSession(id, title, row?.cwd);
+      if (!result.ok) {
+        window.alert(
+          localizeUiError(result.error, t, "nav.renameSessionFailed"),
+        );
+        return;
+      }
+      patchSession(id, (session) => ({ ...session, title }));
+    } catch (error) {
+      window.alert(
+        localizeUiError(
+          error instanceof Error ? error.message : String(error),
+          t,
+          "nav.renameSessionFailed",
+        ),
+      );
+    }
+  }
+
   /** Drop a session from local UI state after a successful agent delete. */
   function forgetSessionLocally(id: string) {
     setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -1894,6 +1921,7 @@ export function useGrokApp() {
     createSideTaskSession,
     closeSideTaskSession,
     submitSideTaskPrompt,
+    handleRename,
     handleDelete,
     handleDeleteProject,
     handleSelect,

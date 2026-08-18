@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applySessionUpdate,
   attachTurnArtifacts,
   HistoryMessageAccumulator,
 } from "./sessionUpdate";
@@ -11,6 +12,17 @@ function replayChunk(sessionUpdate: string, text: string) {
     update: {
       sessionUpdate,
       content: { type: "text", text },
+    },
+  };
+}
+
+function replayImage(data = "cG5n", mimeType = "image/png") {
+  return {
+    sessionId: "session-1",
+    _meta: { isReplay: true },
+    update: {
+      sessionUpdate: "user_message_chunk",
+      content: { type: "image", data, mimeType },
     },
   };
 }
@@ -35,6 +47,45 @@ describe("HistoryMessageAccumulator", () => {
         { type: "text", text: "First second" },
       ]);
     }
+  });
+
+  it("restores user images from history replay", () => {
+    const history = new HistoryMessageAccumulator();
+    history.push(replayImage());
+    history.push(replayChunk("user_message_chunk", "Describe this image"));
+
+    const [message] = history.finish();
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Describe this image",
+      images: [
+        {
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,cG5n",
+        },
+      ],
+    });
+    if (message?.role === "user") {
+      expect(message.images?.[0]).not.toHaveProperty("data");
+    }
+  });
+});
+
+describe("applySessionUpdate history replay", () => {
+  it("restores an image chunk on the compatibility path", () => {
+    const [message] = applySessionUpdate([], replayImage("anBn", "image/jpeg"));
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "",
+      images: [
+        {
+          mimeType: "image/jpeg",
+          dataUrl: "data:image/jpeg;base64,anBn",
+        },
+      ],
+    });
   });
 });
 

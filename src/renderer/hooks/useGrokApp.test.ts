@@ -243,6 +243,34 @@ describe("useGrokApp session switching", () => {
     expect(result.current.loadingHistory).toBe(false);
   });
 
+  it("persists a renamed session and updates its sidebar title", async () => {
+    const renameSession = vi.fn(async () => ({
+      ok: true,
+      title: "Renamed session",
+    }));
+    Object.assign(window.grok!, { renameSession });
+
+    const { result } = renderHook(() => useGrokApp());
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    await seedReadySession("session-to-rename");
+
+    await act(async () => {
+      await result.current.handleRename(
+        "session-to-rename",
+        "  Renamed session  ",
+      );
+    });
+
+    expect(renameSession).toHaveBeenCalledWith(
+      "session-to-rename",
+      "Renamed session",
+      "/w",
+    );
+    expect(
+      result.current.sessions.find((s) => s.id === "session-to-rename")?.title,
+    ).toBe("Renamed session");
+  });
+
   it("keeps unsent composer text and images per session when switching", async () => {
     const { result } = renderHook(() => useGrokApp());
     await waitFor(() => expect(result.current.state.status).toBe("ready"));
